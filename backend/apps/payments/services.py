@@ -1,0 +1,309 @@
+"""
+BizYangu — payments services.
+
+All the actual M-Pesa business logic lives here so views.py stays a
+thin HTTP layer. Three jobs:
+
+1. Kick off an STK Push for a pending sale.
+2. Process the STK callback Daraja sends back (success or failure).
+3. Process C2B confirmations (till-number payments with no STK push
+   involved) and try to auto-match them to an open sale.
+
+Every function here is written to be safe to call from a view AND
+safe to retry — Daraja can and will call the callback URL more than
+once for the same transaction, so everything keys off unique fields
+(checkout_request_id, mpesa_receipt_number) and uses explicit
+duplicate checks rather than blind .create().
+"""
+
+import logging
+from datetime import timedelta
+from decimal import Decimal
+
+from django.db import transaction as db_transaction
+from django.utils import timezone
+
+from apps.transactions.models import Transaction
+from apps.inventory.models import StockMovement
+from . import daraja
+from .daraja import DarajaError  # noqa: F401 — re-exported for views.py
+from .models import MPesaSTKRequest, MPesaTransaction
+
+logger = logging.getLogger(__name__)
+
+
+def _broadcast(business_id, payload: dict) -> None:
+    """
+    Pushes a payment-status update to the POS screen over WebSocket.
+    Fails silently if Channels/Redis isn't reachable — the frontend
+    falls back to polling (see lib/payments.ts), so a dropped
+    broadcast degrades the UX but never breaks the sale.
+    """
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+
+        layer = get_channel_layer()
+        if layer is None:
+            return
+        async_to_sync(layer.group_send)(
+            f'mpesa_business_{business_id}',
+            {'type': 'mpesa.update', 'payload': payload},
+        )
+    except Exception:
+        logger.exception('WebSocket broadcast failed for business %s', business_id)
+
+
+def initiate_stk_push(*, transaction: Transaction, phone_number: str) -> MPesaSTKRequest:
+    """
+    Starts an STK Push for an already-created SALE transaction sitting
+    at payment_status=PENDING. Raises DarajaError on failure — the
+    caller (view) is responsible for turning that into an HTTP error;
+    the Transaction itself is left untouched (still PENDING) so the
+    cashier can retry or fall back to cash.
+    """
+    response = daraja.stk_push(
+        phone_number=phone_number,
+        amount=transaction.total_amount,
+        account_reference=transaction.reference_number,
+        transaction_desc=f'BizYangu {transaction.reference_number}',
+    )
+
+    stk_request = MPesaSTKRequest.objects.create(
+        business=transaction.business,
+        transaction=transaction,
+        checkout_request_id=response['CheckoutRequestID'],
+        merchant_request_id=response['MerchantRequestID'],
+        phone_number=daraja.normalize_phone(phone_number),
+        amount=transaction.total_amount,
+        status=MPesaSTKRequest.Status.PENDING,
+    )
+    return stk_request
+
+
+def _void_transaction_for_failed_payment(transaction: Transaction, reason: str) -> None:
+    """
+    Auto-voids a SALE transaction whose M-Pesa payment failed/timed
+    out, restoring stock. A failed STK Push means the customer didn't
+    actually pay — there's no reason to hold the stock as sold.
+    Mirrors the manual void logic in apps/transactions/views.py.
+    """
+    if transaction.is_voided:
+        return
+    with db_transaction.atomic():
+        transaction.is_voided = True
+        transaction.void_reason = reason
+        transaction.payment_status = Transaction.PaymentStatus.FAILED
+        transaction.save(update_fields=['is_voided', 'void_reason', 'payment_status'])
+
+        for item in transaction.items.select_related('product').all():
+            if item.product.track_stock:
+                qty_before = item.product.current_stock
+                item.product.current_stock += item.quantity
+                item.product.save(update_fields=['current_stock'])
+                StockMovement.objects.create(
+                    business=transaction.business,
+                    product=item.product,
+                    transaction=transaction,
+                    movement_type=StockMovement.MovementType.REFUND,
+                    quantity_change=item.quantity,
+                    quantity_before=qty_before,
+                    quantity_after=item.product.current_stock,
+                    notes=f'Malipo hayakufanikiwa: {transaction.reference_number}',
+                    created_by=transaction.created_by,
+                )
+
+
+def process_stk_callback(payload: dict) -> None:
+    """
+    Handles the Daraja STK callback payload. Shape (per Daraja docs):
+    {
+      "Body": {
+        "stkCallback": {
+          "MerchantRequestID": "...",
+          "CheckoutRequestID": "...",
+          "ResultCode": 0,
+          "ResultDesc": "...",
+          "CallbackMetadata": {
+            "Item": [
+              {"Name": "Amount", "Value": 200},
+              {"Name": "MpesaReceiptNumber", "Value": "NLJ..."},
+              {"Name": "TransactionDate", "Value": 20260627101530},
+              {"Name": "PhoneNumber", "Value": 254712345678}
+            ]
+          }
+        }
+      }
+    }
+    ResultCode 0 = success. Anything else = failed/cancelled by user.
+    """
+    body = (payload or {}).get('Body', {}).get('stkCallback', {})
+    checkout_id = body.get('CheckoutRequestID')
+    if not checkout_id:
+        logger.warning('STK callback missing CheckoutRequestID: %s', payload)
+        return
+
+    try:
+        stk_request = MPesaSTKRequest.objects.select_related('transaction', 'business').get(
+            checkout_request_id=checkout_id,
+        )
+    except MPesaSTKRequest.DoesNotExist:
+        logger.warning('STK callback for unknown CheckoutRequestID: %s', checkout_id)
+        return
+
+    if stk_request.status != MPesaSTKRequest.Status.PENDING:
+        # Daraja retried a callback we already processed — ignore.
+        return
+
+    result_code = body.get('ResultCode')
+    result_desc = body.get('ResultDesc', '')
+    transaction = stk_request.transaction
+
+    if result_code == 0:
+        items = {i['Name']: i.get('Value') for i in body.get('CallbackMetadata', {}).get('Item', [])}
+        receipt = items.get('MpesaReceiptNumber', '')
+
+        with db_transaction.atomic():
+            stk_request.status = MPesaSTKRequest.Status.SUCCESS
+            stk_request.result_code = str(result_code)
+            stk_request.result_desc = result_desc
+            stk_request.completed_at = timezone.now()
+            stk_request.save(update_fields=['status', 'result_code', 'result_desc', 'completed_at'])
+
+            if receipt and not MPesaTransaction.objects.filter(mpesa_receipt_number=receipt).exists():
+                MPesaTransaction.objects.create(
+                    business=stk_request.business,
+                    transaction=transaction,
+                    mpesa_receipt_number=receipt,
+                    phone_number=str(items.get('PhoneNumber', stk_request.phone_number)),
+                    amount=Decimal(str(items.get('Amount', stk_request.amount))),
+                    transaction_date=timezone.now(),
+                    transaction_type=MPesaTransaction.TransactionType.STK_PUSH,
+                    is_matched=True,
+                    is_reconciled=True,
+                    raw_payload=payload,
+                )
+
+            transaction.payment_status = Transaction.PaymentStatus.CONFIRMED
+            transaction.mpesa_reference = receipt
+            transaction.save(update_fields=['payment_status', 'mpesa_reference'])
+
+        _broadcast(stk_request.business_id, {
+            'type': 'stk_result',
+            'checkout_request_id': checkout_id,
+            'transaction_id': str(transaction.id),
+            'status': 'CONFIRMED',
+            'mpesa_receipt': receipt,
+        })
+    else:
+        stk_request.status = MPesaSTKRequest.Status.FAILED
+        stk_request.result_code = str(result_code)
+        stk_request.result_desc = result_desc
+        stk_request.completed_at = timezone.now()
+        stk_request.save(update_fields=['status', 'result_code', 'result_desc', 'completed_at'])
+
+        _void_transaction_for_failed_payment(
+            transaction, reason=f'M-Pesa STK Push imeshindwa: {result_desc}'
+        )
+
+        _broadcast(stk_request.business_id, {
+            'type': 'stk_result',
+            'checkout_request_id': checkout_id,
+            'transaction_id': str(transaction.id),
+            'status': 'FAILED',
+            'mpesa_receipt': None,
+            'result_desc': result_desc,
+        })
+
+
+MATCH_WINDOW_MINUTES = 5
+
+
+def _try_auto_match(mpesa_txn: MPesaTransaction) -> bool:
+    """
+    Looks for an open (PENDING, not voided) SALE transaction on the
+    same business, same amount, created within ±5 minutes of the
+    M-Pesa transaction date. This is for the till-number flow — the
+    customer pays directly at the till without an STK prompt, so the
+    only way to link the payment to a sale is amount + time.
+
+    Returns True if a match was found and linked.
+    """
+    window_start = mpesa_txn.transaction_date - timedelta(minutes=MATCH_WINDOW_MINUTES)
+    window_end = mpesa_txn.transaction_date + timedelta(minutes=MATCH_WINDOW_MINUTES)
+
+    candidates = Transaction.objects.filter(
+        business=mpesa_txn.business,
+        type=Transaction.Type.SALE,
+        payment_method=Transaction.PaymentMethod.MPESA,
+        payment_status=Transaction.PaymentStatus.PENDING,
+        is_voided=False,
+        total_amount=mpesa_txn.amount,
+        created_at__gte=window_start,
+        created_at__lte=window_end,
+    ).order_by('created_at')
+
+    match = candidates.first()
+    if not match:
+        return False
+
+    with db_transaction.atomic():
+        mpesa_txn.transaction = match
+        mpesa_txn.is_matched = True
+        mpesa_txn.is_reconciled = True
+        mpesa_txn.save(update_fields=['transaction', 'is_matched', 'is_reconciled'])
+
+        match.payment_status = Transaction.PaymentStatus.CONFIRMED
+        match.mpesa_reference = mpesa_txn.mpesa_receipt_number
+        match.save(update_fields=['payment_status', 'mpesa_reference'])
+
+    _broadcast(mpesa_txn.business_id, {
+        'type': 'payment_received',
+        'mpesa_transaction_id': str(mpesa_txn.id),
+        'amount': str(mpesa_txn.amount),
+        'phone': mpesa_txn.phone_number,
+        'is_matched': True,
+    })
+    return True
+
+
+def process_c2b_confirmation(payload: dict, business) -> MPesaTransaction:
+    """
+    Handles a Daraja C2B confirmation payload (till-number payment).
+    Shape (per Daraja docs):
+    {
+      "TransID": "NLJ...", "TransAmount": "200.00",
+      "TransTime": "20260627101530", "MSISDN": "254712345678", ...
+    }
+    Always creates an MPesaTransaction (the source of truth for "money
+    that arrived"), then attempts to auto-match it to an open sale.
+    Idempotent on TransID — a duplicate confirmation just returns the
+    existing row instead of erroring.
+    """
+    receipt = payload.get('TransID', '')
+    existing = MPesaTransaction.objects.filter(mpesa_receipt_number=receipt).first()
+    if existing:
+        return existing
+
+    trans_time_raw = payload.get('TransTime', '')
+    try:
+        trans_date = timezone.make_aware(
+            timezone.datetime.strptime(trans_time_raw, '%Y%m%d%H%M%S')
+        )
+    except (ValueError, TypeError):
+        trans_date = timezone.now()
+
+    mpesa_txn = MPesaTransaction.objects.create(
+        business=business,
+        mpesa_receipt_number=receipt or f'UNKNOWN-{timezone.now().timestamp()}',
+        phone_number=payload.get('MSISDN', ''),
+        amount=Decimal(str(payload.get('TransAmount', '0'))),
+        transaction_date=trans_date,
+        transaction_type=MPesaTransaction.TransactionType.C2B,
+        is_matched=False,
+        is_reconciled=False,
+        raw_payload=payload,
+    )
+
+    _try_auto_match(mpesa_txn)
+    return mpesa_txn

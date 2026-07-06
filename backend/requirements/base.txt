@@ -1,0 +1,17 @@
+Django==5.1.5
+djangorestframework==3.15.2
+djangorestframework-simplejwt==5.3.1
+django-cors-headers==4.4.0
+channels==4.1.0
+channels-redis==4.2.0
+celery==5.4.0
+redis==5.0.8
+psycopg2-binary==2.9.9
+python-decouple==3.8
+Pillow
+whitenoise==6.7.0
+shortuuid==1.0.13
+africastalking==1.2.8
+requests==2.32.3
+google-auth==2.34.0
+daphne==4.1.2

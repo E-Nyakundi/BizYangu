@@ -1,0 +1,409 @@
+/* BizYangu — Global Styles
+   LN Design System v1.0
+   Dark-first. Engineering aesthetic.
+   Lewis Nyakundi · Nairobi, KE
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+/* ────────────────────────────────────────────
+   DESIGN TOKENS — LN Design System v1.0
+   ──────────────────────────────────────────── */
+
+:root {
+  /* Typography */
+  --font-display: var(--font-space-grotesk), 'Space Grotesk', sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'JetBrains Mono', monospace;
+
+  --fs-xs:   8pt;
+  --fs-sm:  10pt;
+  --fs-md:  14pt;
+  --fs-lg:  22pt;
+  --fs-xl:  32pt;
+  --fs-2xl: 48pt;
+
+  /* Primary palette */
+  --color-bg-dark:    #0A0A0A;
+  --color-bg-slate:   #1C1F26;
+  --color-off-white:  #F2F0EB;
+  --color-teal:       #00E5C4;
+  --color-teal-dim:   #00A890;
+  --color-error:      #FF4D6D;
+  --color-amber:      #FBBF24;
+  --color-violet:     #A78BFA;
+  --color-muted:      #6B7280;
+
+  /* Surface elevation model */
+  --surface-0: #0A0A0A;   /* Page base */
+  --surface-1: #111318;   /* Default surface */
+  --surface-2: #1C1F26;   /* Card / Panel */
+  --surface-3: #252830;   /* Popover / Modal */
+  --surface-4: #2F3239;   /* Tooltip / Overlay */
+
+  /* Spacing tokens — base-4 scale */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+
+  /* Border radius tokens */
+  --radius-sharp:   0px;
+  --radius-subtle:  4px;
+  --radius-default: 8px;
+  --radius-card:    12px;
+  --radius-button:  20px;
+  --radius-pill:    999px;
+}
+
+/* ────────────────────────────────────────────
+   LIGHT MODE OVERRIDE
+   ──────────────────────────────────────────── */
+[data-theme="light"] {
+  --color-bg-dark:    #F2F0EB;
+  --color-off-white:  #0A0A0A;
+  --color-teal:       #00A890;
+  --color-teal-dim:   #008B6F;
+  --color-error:      #D63447;
+  --color-amber:      #B45309;
+  --color-violet:     #7C3AED;
+  --color-muted:      #6B7280;
+
+  --surface-0: #F2F0EB;
+  --surface-1: #E8E5DF;
+  --surface-2: #DCDAD3;
+  --surface-3: #CFC8C0;
+  --surface-4: #C2B9AF;
+}
+
+/* ────────────────────────────────────────────
+   RESET & BASE
+   ──────────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  color-scheme: dark;
+  background-color: var(--surface-0);
+  color: var(--color-off-white);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-color: var(--surface-0);
+  color: var(--color-off-white);
+  min-height: 100dvh;
+}
+
+/* ────────────────────────────────────────────
+   GRID OVERLAY & CROSSHAIR MARKS
+   ──────────────────────────────────────────── */
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0, 229, 196, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 196, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.crosshair {
+  position: fixed;
+  width: 14px;
+  height: 14px;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.crosshair::before,
+.crosshair::after {
+  content: '';
+  position: absolute;
+  background: var(--color-teal-dim);
+}
+
+.crosshair::before {
+  width: 100%;
+  height: 1px;
+  top: 50%;
+}
+
+.crosshair::after {
+  width: 1px;
+  height: 100%;
+  left: 50%;
+}
+
+.ch-tl { top: 12px; left: 12px; }
+.ch-tr { top: 12px; right: 12px; }
+.ch-bl { bottom: 12px; left: 12px; }
+.ch-br { bottom: 12px; right: 12px; }
+
+a {
+  color: var(--color-teal);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--color-teal-dim);
+}
+
+/* ────────────────────────────────────────────
+   TYPOGRAPHY UTILITIES
+   ──────────────────────────────────────────── */
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--color-off-white);
+}
+
+/* ────────────────────────────────────────────
+   BUTTON COMPONENTS
+   ──────────────────────────────────────────── */
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-5);
+  background-color: var(--color-teal);
+  color: var(--surface-0);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  border-radius: var(--radius-button);
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.btn-primary:hover {
+  background-color: var(--color-teal-dim);
+  color: var(--surface-0);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-5);
+  background-color: transparent;
+  color: var(--color-off-white);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  border-radius: var(--radius-button);
+  border: 1px solid var(--color-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-secondary:hover {
+  border-color: var(--color-teal);
+  color: var(--color-teal);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  background-color: transparent;
+  color: var(--color-muted);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  border-radius: var(--radius-button);
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.btn-ghost:hover {
+  color: var(--color-off-white);
+}
+
+.btn-destructive {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-5);
+  background-color: transparent;
+  color: var(--color-error);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  border-radius: var(--radius-button);
+  border: 1px solid var(--color-error);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.btn-destructive:hover {
+  background-color: var(--color-error);
+  color: var(--surface-0);
+}
+
+.btn-sm {
+  padding: 5px 14px;
+  font-size: var(--fs-xs);
+}
+
+/* ────────────────────────────────────────────
+   CARD COMPONENTS
+   ──────────────────────────────────────────── */
+
+.card {
+  background-color: var(--surface-2);
+  border-radius: var(--radius-card);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: var(--sp-5);
+}
+
+.card-accent {
+  background-color: var(--surface-2);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--color-teal);
+  padding: var(--sp-5);
+}
+
+.card-stat {
+  background-color: var(--surface-1);
+  border-radius: var(--radius-card);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: var(--sp-5);
+}
+
+.card-terminal {
+  background-color: var(--surface-1);
+  border-radius: var(--radius-default);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: var(--sp-5);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: 1.7;
+}
+
+/* ────────────────────────────────────────────
+   FORM INPUTS
+   ──────────────────────────────────────────── */
+
+.input {
+  width: 100%;
+  background-color: var(--surface-2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-default);
+  color: var(--color-off-white);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  padding: var(--sp-3) var(--sp-4);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.input:focus {
+  border-color: var(--color-teal);
+}
+
+.input::placeholder {
+  color: var(--color-muted);
+}
+
+/* ────────────────────────────────────────────
+   BADGE / STATUS TAG COMPONENTS
+   ──────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--sp-3);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.badge-active   { background: rgba(0, 229, 196, 0.15); color: var(--color-teal); }
+.badge-error    { background: rgba(255, 77,  109, 0.15); color: var(--color-error); }
+.badge-muted    { background: rgba(107, 114, 128, 0.15); color: var(--color-muted); }
+.badge-violet   { background: rgba(167, 139, 250, 0.15); color: var(--color-violet); }
+
+/* Domain-specific badges for business logic */
+.badge-ok       { background: rgba(0, 229, 196, 0.15); color: var(--color-teal); }
+.badge-low      { background: rgba(245, 158, 11, 0.15); color: #F59E0B; }
+.badge-out      { background: rgba(255, 77, 109, 0.15); color: var(--color-error); }
+.badge-demo     { background: rgba(167, 139, 250, 0.15); color: var(--color-violet); }
+.badge-expired  { background: rgba(255, 77, 109, 0.15); color: var(--color-error); }
+.badge-suspended { background: rgba(107, 114, 128, 0.15); color: var(--color-muted); }
+.badge-pending  { background: rgba(245, 158, 11, 0.15); color: #F59E0B; }
+.badge-confirmed { background: rgba(0, 229, 196, 0.15); color: var(--color-teal); }
+.badge-failed   { background: rgba(255, 77, 109, 0.15); color: var(--color-error); }
+
+/* ────────────────────────────────────────────
+   COORDINATE GRID MOTIF (decorative background)
+   ──────────────────────────────────────────── */
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(0, 229, 196, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 229, 196, 0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* ────────────────────────────────────────────
+   SCROLLBAR
+   ──────────────────────────────────────────── */
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--surface-0); }
+::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: var(--radius-pill); }
+::-webkit-scrollbar-thumb:hover { background: var(--color-muted); }
+
+/* ────────────────────────────────────────────
+   THEME TOGGLE BUTTON
+   ──────────────────────────────────────────── */
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background-color: transparent;
+  border: 1px solid var(--surface-3);
+  border-radius: var(--radius-button);
+  color: var(--color-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+  font-size: 18px;
+}
+
+.theme-toggle:hover {
+  border-color: var(--color-teal);
+  color: var(--color-teal);
+}

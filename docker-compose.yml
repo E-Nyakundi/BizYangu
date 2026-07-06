@@ -1,0 +1,95 @@
+# BizYangu — Docker Compose (full stack)
+# Services: postgres, redis, django backend, next.js frontend
+#
+# Usage:
+#   docker-compose up -d            # start everything
+#   docker-compose up -d postgres redis   # infra only
+#   docker-compose logs -f backend  # tail Django logs
+#   docker-compose logs -f frontend # tail Next.js logs
+#   docker-compose down             # stop all
+#   docker-compose down -v          # stop + wipe volumes
+
+services:
+
+  # ── Infrastructure ────────────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: bizyango_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bidness
+      POSTGRES_USER: lewis
+      POSTGRES_PASSWORD: "M@$ter"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lewis -d bidness"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: bizyango_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend ───────────────────────────────────────────────────
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bizyango_backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             daphne -b 0.0.0.0 -p 8000 bizyangu.asgi:application"
+
+  # ── Frontend ──────────────────────────────────────────────────
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bizyango_frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: https://pixels-acknowledged-chef-topics.trycloudflare.com/api/v1
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

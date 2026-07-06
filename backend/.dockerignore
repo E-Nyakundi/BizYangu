@@ -1,0 +1,13 @@
+venv
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
+*.egg-info
+dist
+build
+staticfiles
+media
+.git

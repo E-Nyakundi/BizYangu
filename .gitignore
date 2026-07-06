@@ -1,0 +1,56 @@
+# ── Python / Django ────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+.env
+*.env
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+.venv/
+venv/
+env/
+
+# ── Node / Next.js ──────────────────────────────────────────────
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Capacitor / Android / iOS ──────────────────────────────────
+android/
+ios/
+*.apk
+*.aab
+*.ipa
+
+# ── OS ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ── IDE ──────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.iml
+
+# ── Secrets ─────────────────────────────────────────────────────
+*.pem
+*.key
+*.crt
+secrets/
