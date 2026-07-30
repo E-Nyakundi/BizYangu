@@ -2,9 +2,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# System deps for psycopg2
+# System deps for psycopg2 and psql CLI (refreshed 2026-07-23)
 RUN apt-get update && apt-get install -y \
-    libpq-dev gcc \
+    libpq-dev gcc postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements/development.txt requirements/development.txt

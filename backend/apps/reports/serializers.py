@@ -15,6 +15,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from apps.core.messages import MESSAGES
+from .models import BusinessMilestone
 
 # Period endpoints (period/, products/, losses/) default to the last 30
 # days when no start/end is given, and refuse windows longer than this —
@@ -68,3 +69,27 @@ class PeriodQuerySerializer(serializers.Serializer):
         attrs['start'] = start
         attrs['end'] = end
         return attrs
+
+
+class BusinessMilestoneSerializer(serializers.ModelSerializer):
+    """Read-only — milestones are only ever created by
+    apps.reports.services, never via the API. `message` is the plain-
+    language celebratory line the frontend shows as-is (bilingual via
+    core/messages.py), computed here rather than left for the frontend
+    to reconstruct from milestone_type + value."""
+
+    message = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BusinessMilestone
+        fields = ['id', 'milestone_type', 'value', 'achieved_at', 'message']
+        read_only_fields = fields
+
+    def get_message(self, obj):
+        if obj.milestone_type == BusinessMilestone.MilestoneType.HIGHEST_DAY_SALES:
+            return MESSAGES['MILESTONE_HIGHEST_DAY_SALES'].format(value=obj.value)
+        if obj.milestone_type == BusinessMilestone.MilestoneType.FULLY_RECONCILED_WEEK:
+            return MESSAGES['MILESTONE_FULLY_RECONCILED_WEEK']
+        if obj.milestone_type == BusinessMilestone.MilestoneType.CONFIDENCE_TO_ACT:
+            return MESSAGES['MILESTONE_CONFIDENCE_TO_ACT'].format(percentage=obj.value)
+        return ''

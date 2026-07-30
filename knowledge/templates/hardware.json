@@ -1,0 +1,560 @@
+{
+  "business_type_id": "hardware",
+  "kind": "goods",
+  "_notes": [
+    "Sub-niche example discussed: a hardware business that deals ONLY in",
+    "plumbing + electrical is a candidate sub-niche of this general",
+    "template (Build Plan v3, Phase 13 — cross-business detection, later,",
+    "data-gated). This template stays general; sub-niche narrowing is not",
+    "a separate template at this stage, just a future filtered view of it."
+  ],
+  "categories": [
+    {
+      "category_id": "cement_building_materials",
+      "items": [
+        {
+          "name": "Cement",
+          "brands": [
+            "Bamburi",
+            "Simba Cement",
+            "Ndovu",
+            "National Cement"
+          ],
+          "units": [
+            "sack_50kg",
+            "tonne"
+          ]
+        },
+        {
+          "name": "Ballast",
+          "brands": [],
+          "units": [
+            "tonne"
+          ]
+        },
+        {
+          "name": "Sand",
+          "brands": [],
+          "units": [
+            "tonne"
+          ]
+        },
+        {
+          "name": "Hardcore",
+          "brands": [],
+          "units": [
+            "tonne"
+          ]
+        },
+        {
+          "name": "Quarry dust",
+          "brands": [],
+          "units": [
+            "tonne"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "paint",
+      "subcategories": [
+        {
+          "subcategory_id": "paint_interior",
+          "items": [
+            {
+              "name": "Emulsion paint",
+              "brands": [
+                "Crown Paints",
+                "Basco",
+                "Duracoat",
+                "Sadolin"
+              ],
+              "units": [
+                "litre",
+                "bucket"
+              ]
+            },
+            {
+              "name": "Undercoat",
+              "brands": [
+                "Crown Paints",
+                "Sadolin",
+                "Duracoat"
+              ],
+              "units": [
+                "litre"
+              ]
+            }
+          ]
+        },
+        {
+          "subcategory_id": "paint_exterior",
+          "items": [
+            {
+              "name": "Weatherguard paint",
+              "brands": [
+                "Crown Paints",
+                "Duracoat",
+                "Sadolin"
+              ],
+              "units": [
+                "litre",
+                "bucket"
+              ]
+            },
+            {
+              "name": "Textured paint",
+              "brands": [
+                "Crown Paints",
+                "Duracoat"
+              ],
+              "units": [
+                "litre",
+                "bucket"
+              ]
+            }
+          ]
+        },
+        {
+          "subcategory_id": "paint_enamel_gloss",
+          "items": [
+            {
+              "name": "Gloss paint",
+              "brands": [
+                "Crown Paints",
+                "Sadolin",
+                "Duracoat"
+              ],
+              "units": [
+                "litre"
+              ]
+            },
+            {
+              "name": "Enamel paint",
+              "brands": [
+                "Crown Paints",
+                "Sadolin",
+                "Duracoat"
+              ],
+              "units": [
+                "litre"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "plumbing",
+      "subcategories": [
+        {
+          "subcategory_id": "plumbing_pipes_fittings",
+          "items": [
+            {
+              "name": "PVC pipe",
+              "brands": [
+                "Kenpoly",
+                "Bluestar",
+                "Simba Pipes"
+              ],
+              "units": [
+                "metre",
+                "piece"
+              ]
+            },
+            {
+              "name": "GI pipe",
+              "brands": [
+                "Doshi",
+                "Devki"
+              ],
+              "units": [
+                "metre",
+                "piece"
+              ]
+            },
+            {
+              "name": "Elbow joint",
+              "brands": [],
+              "units": [
+                "piece"
+              ]
+            },
+            {
+              "name": "Tee joint",
+              "brands": [],
+              "units": [
+                "piece"
+              ]
+            },
+            {
+              "name": "Coupling",
+              "brands": [],
+              "units": [
+                "piece"
+              ]
+            }
+          ]
+        },
+        {
+          "subcategory_id": "plumbing_sanitary_fixtures",
+          "items": [
+            {
+              "name": "Toilet bowl (closet)",
+              "brands": [
+                "Twyford",
+                "Armitage Shanks",
+                "Sanitec"
+              ],
+              "units": [
+                "piece"
+              ]
+            },
+            {
+              "name": "Sink",
+              "brands": [
+                "Twyford",
+                "Franke"
+              ],
+              "units": [
+                "piece"
+              ]
+            },
+            {
+              "name": "Tap",
+              "brands": [
+                "Kohler",
+                "Cobra",
+                "Twyford"
+              ],
+              "units": [
+                "piece"
+              ]
+            },
+            {
+              "name": "Shower mixer",
+              "brands": [
+                "Kohler",
+                "Cobra"
+              ],
+              "units": [
+                "piece"
+              ]
+            }
+          ]
+        },
+        {
+          "subcategory_id": "plumbing_water_storage",
+          "items": [
+            {
+              "name": "Water tank",
+              "brands": [
+                "Kentank",
+                "Roto",
+                "Duraplast",
+                "Rotoplas"
+              ],
+              "units": [
+                "piece"
+              ],
+              "notes": "sold by litre capacity, e.g. 1000L/5000L — capacity is a variant, not a separate item"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "electrical",
+      "subcategories": [
+        {
+          "subcategory_id": "electrical_wiring_cables",
+          "items": [
+            {
+              "name": "Electrical cable",
+              "brands": [
+                "East African Cables",
+                "Kenya Wire Industries"
+              ],
+              "units": [
+                "roll",
+                "metre"
+              ]
+            },
+            {
+              "name": "Flex cable",
+              "brands": [
+                "East African Cables",
+                "Kenya Wire Industries"
+              ],
+              "units": [
+                "roll",
+                "metre"
+              ]
+            }
+          ]
+        },
+        {
+          "subcategory_id": "electrical_switches_sockets",
+          "items": [
+            {
+              "name": "Switch",
+              "brands": [
+                "MK",
+                "Crabtree",
+                "CBI"
+              ],
+              "units": [
+                "piece"
+              ]
+            },
+            {
+              "name": "Socket",
+              "brands": [
+                "MK",
+                "Crabtree",
+                "CBI"
+              ],
+              "units": [
+                "piece"
+              ]
+            },
+            {
+              "name": "Plug",
+              "brands": [
+                "MK",
+                "Crabtree",
+                "CBI"
+              ],
+              "units": [
+                "piece"
+              ]
+            }
+          ]
+        },
+        {
+          "subcategory_id": "electrical_circuit_protection",
+          "items": [
+            {
+              "name": "Circuit breaker (MCB)",
+              "brands": [
+                "Schneider",
+                "ABB",
+                "Legrand"
+              ],
+              "units": [
+                "piece"
+              ]
+            },
+            {
+              "name": "Distribution board (DB)",
+              "brands": [
+                "Schneider",
+                "ABB",
+                "Legrand"
+              ],
+              "units": [
+                "piece"
+              ]
+            }
+          ]
+        },
+        {
+          "subcategory_id": "electrical_lighting",
+          "items": [
+            {
+              "name": "Bulb (LED/CFL)",
+              "brands": [
+                "Philips",
+                "Osram",
+                "Eveready"
+              ],
+              "units": [
+                "piece"
+              ]
+            },
+            {
+              "name": "Fluorescent tube",
+              "brands": [
+                "Philips",
+                "Osram"
+              ],
+              "units": [
+                "piece"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "fasteners",
+      "items": [
+        {
+          "name": "Nails",
+          "brands": [],
+          "units": [
+            "kg",
+            "packet"
+          ]
+        },
+        {
+          "name": "Screws",
+          "brands": [],
+          "units": [
+            "packet",
+            "piece"
+          ]
+        },
+        {
+          "name": "Bolts & nuts",
+          "brands": [],
+          "units": [
+            "packet",
+            "piece"
+          ]
+        },
+        {
+          "name": "Wood screws",
+          "brands": [],
+          "units": [
+            "packet",
+            "piece"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "hand_tools",
+      "items": [
+        {
+          "name": "Hammer",
+          "brands": [
+            "Stanley",
+            "Bahco"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Spanner set",
+          "brands": [
+            "Stanley",
+            "Bahco",
+            "Craftsman"
+          ],
+          "units": [
+            "set"
+          ]
+        },
+        {
+          "name": "Screwdriver",
+          "brands": [
+            "Stanley",
+            "Bahco"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Tape measure",
+          "brands": [
+            "Stanley",
+            "Bahco"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Wheelbarrow",
+          "brands": [
+            "Kobe"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Panga/machete",
+          "brands": [],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Jembe/hoe",
+          "brands": [],
+          "units": [
+            "piece"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "roofing",
+      "items": [
+        {
+          "name": "Iron sheets (mabati)",
+          "brands": [
+            "Mabati Rolling Mills",
+            "Royal Mabati",
+            "Versatile"
+          ],
+          "units": [
+            "piece",
+            "gauge"
+          ]
+        },
+        {
+          "name": "Roofing nails",
+          "brands": [],
+          "units": [
+            "kg"
+          ]
+        },
+        {
+          "name": "Ridge cap",
+          "brands": [],
+          "units": [
+            "piece"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "timber_boards",
+      "items": [
+        {
+          "name": "Timber (various sizes)",
+          "brands": [],
+          "units": [
+            "piece",
+            "foot"
+          ]
+        },
+        {
+          "name": "Plywood",
+          "brands": [
+            "Timsales",
+            "Comply"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "MDF board",
+          "brands": [
+            "Timsales",
+            "Comply"
+          ],
+          "units": [
+            "piece"
+          ]
+        }
+      ]
+    }
+  ]
+}

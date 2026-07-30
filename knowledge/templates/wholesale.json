@@ -1,0 +1,216 @@
+{
+  "business_type_id": "wholesale",
+  "kind": "goods",
+  "_notes": [
+    "Standalone type per explicit decision, not a variant/attribute of",
+    "other types. Deliberately broad — a real wholesale business usually",
+    "specializes in ONE of these category groups (foodstuffs, beverages,",
+    "household, building materials, produce) rather than all of them; this",
+    "template covers the common groupings rather than assuming a single",
+    "specialization. Bulk unit sizes (sack_50kg, tonne, crate/case rather",
+    "than single-piece) are the main structural difference from the",
+    "retail-facing templates for the same goods.",
+    "Growth-path note: kiosk -> retailer -> wholesaler is a possible",
+    "future maturity path (not implemented) — this template stands alone",
+    "regardless of how a business arrived at being a wholesaler."
+  ],
+  "categories": [
+    {
+      "category_id": "wholesale_foodstuffs",
+      "subcategories": [
+        {
+          "subcategory_id": "wholesale_foodstuffs_dry",
+          "items": [
+            {
+              "name": "Maize flour (unga) — bulk",
+              "brands": [
+                "Jogoo",
+                "Pembe"
+              ],
+              "units": [
+                "sack_50kg"
+              ]
+            },
+            {
+              "name": "Rice — bulk",
+              "brands": [
+                "Pearl"
+              ],
+              "units": [
+                "sack_50kg"
+              ]
+            },
+            {
+              "name": "Sugar — bulk",
+              "brands": [],
+              "units": [
+                "sack_50kg"
+              ]
+            },
+            {
+              "name": "Beans — bulk",
+              "brands": [],
+              "units": [
+                "sack_50kg"
+              ]
+            }
+          ]
+        },
+        {
+          "subcategory_id": "wholesale_foodstuffs_cooking",
+          "items": [
+            {
+              "name": "Cooking oil — bulk",
+              "brands": [
+                "Fresh Fri",
+                "Golden Fry"
+              ],
+              "units": [
+                "debe_20l",
+                "litre"
+              ]
+            },
+            {
+              "name": "Salt — bulk",
+              "brands": [],
+              "units": [
+                "sack_50kg"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "wholesale_beverages",
+      "items": [
+        {
+          "name": "Soda — bulk",
+          "brands": [
+            "Coca-Cola"
+          ],
+          "units": [
+            "crate"
+          ]
+        },
+        {
+          "name": "Bottled water — bulk",
+          "brands": [
+            "Keringet",
+            "Dasani"
+          ],
+          "units": [
+            "crate",
+            "bale"
+          ]
+        },
+        {
+          "name": "Beer — bulk (licensed distribution)",
+          "brands": [
+            "Tusker",
+            "White Cap"
+          ],
+          "units": [
+            "crate"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "wholesale_household",
+      "items": [
+        {
+          "name": "Washing powder/detergent — bulk",
+          "brands": [
+            "Omo"
+          ],
+          "units": [
+            "bale",
+            "packet"
+          ]
+        },
+        {
+          "name": "Bar soap — bulk",
+          "brands": [
+            "Geisha"
+          ],
+          "units": [
+            "bale",
+            "piece"
+          ]
+        },
+        {
+          "name": "Toilet paper — bulk",
+          "brands": [
+            "Rosy"
+          ],
+          "units": [
+            "bale"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "wholesale_building_materials",
+      "items": [
+        {
+          "name": "Cement — bulk",
+          "brands": [
+            "Bamburi",
+            "Simba Cement"
+          ],
+          "units": [
+            "sack_50kg",
+            "tonne"
+          ]
+        },
+        {
+          "name": "Iron sheets — bulk",
+          "brands": [
+            "Mabati Rolling Mills"
+          ],
+          "units": [
+            "piece"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "wholesale_produce",
+      "items": [
+        {
+          "name": "Onions — bulk",
+          "brands": [],
+          "units": [
+            "sack_50kg",
+            "gorogoro"
+          ]
+        },
+        {
+          "name": "Potatoes — bulk",
+          "brands": [],
+          "units": [
+            "sack_50kg"
+          ]
+        },
+        {
+          "name": "Tomatoes — bulk",
+          "brands": [],
+          "units": [
+            "gorogoro",
+            "kg"
+          ]
+        },
+        {
+          "name": "Cabbages — bulk",
+          "brands": [],
+          "units": [
+            "piece",
+            "kg"
+          ]
+        }
+      ],
+      "notes": "produce wholesale overlaps with perishability tracking (Build Plan v3, Phase 11) — flagging the connection, not building it here."
+    }
+  ]
+}

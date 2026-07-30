@@ -1,0 +1,436 @@
+{
+  "_notes": [
+    "Categories are defined ONCE here and referenced by id from each",
+    "business-type template in templates/*.json — this resolves the",
+    "shared-category question from the discussion: categories that",
+    "naturally recur across types (soft drinks, tobacco, bottled water)",
+    "are defined once rather than duplicated, so corrections don't drift",
+    "out of sync across templates.",
+    "'shared' = true means 2+ business types reference it.",
+    "This is a draft structure — category boundaries and naming are",
+    "exactly the kind of thing that needs real review, not brand names",
+    "alone."
+  ],
+  "categories": [
+    {
+      "id": "cement_building_materials",
+      "name": "Cement & Building Materials",
+      "shared": false,
+      "used_by": [
+        "hardware"
+      ]
+    },
+    {
+      "id": "paint",
+      "name": "Paint",
+      "shared": false,
+      "used_by": [
+        "hardware"
+      ]
+    },
+    {
+      "id": "plumbing",
+      "name": "Plumbing",
+      "shared": false,
+      "used_by": [
+        "hardware"
+      ]
+    },
+    {
+      "id": "electrical",
+      "name": "Electrical",
+      "shared": false,
+      "used_by": [
+        "hardware"
+      ]
+    },
+    {
+      "id": "fasteners",
+      "name": "Fasteners",
+      "shared": false,
+      "used_by": [
+        "hardware"
+      ]
+    },
+    {
+      "id": "hand_tools",
+      "name": "Hand Tools",
+      "shared": false,
+      "used_by": [
+        "hardware"
+      ]
+    },
+    {
+      "id": "roofing",
+      "name": "Roofing",
+      "shared": false,
+      "used_by": [
+        "hardware"
+      ]
+    },
+    {
+      "id": "timber_boards",
+      "name": "Timber & Boards",
+      "shared": false,
+      "used_by": [
+        "hardware"
+      ]
+    },
+    {
+      "id": "beer",
+      "name": "Beer",
+      "shared": false,
+      "used_by": [
+        "bar"
+      ]
+    },
+    {
+      "id": "spirits",
+      "name": "Spirits",
+      "shared": false,
+      "used_by": [
+        "bar"
+      ]
+    },
+    {
+      "id": "wine",
+      "name": "Wine",
+      "shared": false,
+      "used_by": [
+        "bar"
+      ]
+    },
+    {
+      "id": "rtd_ciders",
+      "name": "Ready-to-drink / Ciders",
+      "shared": false,
+      "used_by": [
+        "bar"
+      ]
+    },
+    {
+      "id": "bar_snacks",
+      "name": "Bar Snacks",
+      "shared": false,
+      "used_by": [
+        "bar"
+      ]
+    },
+    {
+      "id": "bar_consumables",
+      "name": "Bar Consumables (non-sellable)",
+      "shared": false,
+      "used_by": [
+        "bar"
+      ]
+    },
+    {
+      "id": "soft_drinks_water",
+      "name": "Soft Drinks & Bottled Water",
+      "shared": true,
+      "used_by": [
+        "bar",
+        "kiosk"
+      ]
+    },
+    {
+      "id": "tobacco",
+      "name": "Tobacco & Cigarettes",
+      "shared": true,
+      "used_by": [
+        "bar",
+        "kiosk"
+      ]
+    },
+    {
+      "id": "staple_foods",
+      "name": "Staple Foods & Provisions",
+      "shared": false,
+      "used_by": [
+        "kiosk"
+      ]
+    },
+    {
+      "id": "household_essentials",
+      "name": "Household Essentials",
+      "shared": false,
+      "used_by": [
+        "kiosk"
+      ]
+    },
+    {
+      "id": "airtime_mobile_money",
+      "name": "Airtime & Mobile Money Float",
+      "shared": true,
+      "used_by": [
+        "kiosk"
+      ]
+    },
+    {
+      "id": "snacks_confectionery",
+      "name": "Snacks & Confectionery",
+      "shared": true,
+      "used_by": [
+        "kiosk",
+        "bar"
+      ]
+    },
+    {
+      "id": "toiletries_personal_care",
+      "name": "Toiletries & Personal Care",
+      "shared": true,
+      "used_by": [
+        "kiosk",
+        "clothing_store"
+      ]
+    },
+    {
+      "id": "womenswear",
+      "name": "Womenswear",
+      "shared": false,
+      "used_by": [
+        "clothing_store"
+      ]
+    },
+    {
+      "id": "menswear",
+      "name": "Menswear",
+      "shared": false,
+      "used_by": [
+        "clothing_store"
+      ]
+    },
+    {
+      "id": "childrenswear",
+      "name": "Childrenswear",
+      "shared": false,
+      "used_by": [
+        "clothing_store"
+      ]
+    },
+    {
+      "id": "footwear",
+      "name": "Footwear",
+      "shared": false,
+      "used_by": [
+        "clothing_store"
+      ]
+    },
+    {
+      "id": "bags_accessories",
+      "name": "Bags & Accessories",
+      "shared": false,
+      "used_by": [
+        "clothing_store"
+      ]
+    },
+    {
+      "id": "jewelry_watches",
+      "name": "Jewelry & Watches",
+      "shared": false,
+      "used_by": [
+        "clothing_store"
+      ]
+    },
+    {
+      "id": "wholesale_foodstuffs",
+      "name": "Wholesale Foodstuffs & Provisions",
+      "shared": false,
+      "used_by": [
+        "wholesale"
+      ]
+    },
+    {
+      "id": "wholesale_beverages",
+      "name": "Wholesale Beverages",
+      "shared": false,
+      "used_by": [
+        "wholesale"
+      ]
+    },
+    {
+      "id": "wholesale_household",
+      "name": "Wholesale Household Goods",
+      "shared": false,
+      "used_by": [
+        "wholesale"
+      ]
+    },
+    {
+      "id": "wholesale_building_materials",
+      "name": "Wholesale Building Materials",
+      "shared": false,
+      "used_by": [
+        "wholesale"
+      ]
+    },
+    {
+      "id": "wholesale_produce",
+      "name": "Wholesale Fresh Produce",
+      "shared": false,
+      "used_by": [
+        "wholesale"
+      ]
+    },
+    {
+      "id": "hair_services",
+      "name": "Hair Services",
+      "shared": false,
+      "used_by": [
+        "salon_barbershop"
+      ]
+    },
+    {
+      "id": "grooming_services",
+      "name": "Grooming Services",
+      "shared": false,
+      "used_by": [
+        "salon_barbershop"
+      ]
+    },
+    {
+      "id": "nail_services",
+      "name": "Nail Services",
+      "shared": false,
+      "used_by": [
+        "salon_barbershop"
+      ]
+    },
+    {
+      "id": "skin_beauty_services",
+      "name": "Skin & Beauty Services",
+      "shared": false,
+      "used_by": [
+        "salon_barbershop"
+      ]
+    },
+    {
+      "id": "hair_beauty_retail_addon",
+      "name": "Hair & Beauty Retail Add-on Products",
+      "shared": false,
+      "used_by": [
+        "salon_barbershop"
+      ]
+    },
+    {
+      "id": "grains_cereals",
+      "name": "Grains & Cereals",
+      "shared": false,
+      "used_by": [
+        "cereals_grains"
+      ]
+    },
+    {
+      "id": "legumes_pulses",
+      "name": "Legumes & Pulses",
+      "shared": false,
+      "used_by": [
+        "cereals_grains"
+      ]
+    },
+    {
+      "id": "flour_milled_products",
+      "name": "Flour & Milled Products",
+      "shared": false,
+      "used_by": [
+        "cereals_grains"
+      ]
+    },
+    {
+      "id": "engine_parts",
+      "name": "Engine Parts",
+      "shared": false,
+      "used_by": [
+        "auto_spares"
+      ]
+    },
+    {
+      "id": "suspension_steering",
+      "name": "Suspension & Steering",
+      "shared": false,
+      "used_by": [
+        "auto_spares"
+      ]
+    },
+    {
+      "id": "brakes",
+      "name": "Brakes",
+      "shared": false,
+      "used_by": [
+        "auto_spares"
+      ]
+    },
+    {
+      "id": "electrical_auto",
+      "name": "Auto Electrical",
+      "shared": false,
+      "used_by": [
+        "auto_spares"
+      ]
+    },
+    {
+      "id": "body_parts",
+      "name": "Body Parts & Accessories",
+      "shared": false,
+      "used_by": [
+        "auto_spares"
+      ]
+    },
+    {
+      "id": "fluids_filters",
+      "name": "Fluids & Filters",
+      "shared": false,
+      "used_by": [
+        "auto_spares"
+      ]
+    },
+    {
+      "id": "tyres_batteries",
+      "name": "Tyres & Batteries",
+      "shared": false,
+      "used_by": [
+        "auto_spares"
+      ]
+    },
+    {
+      "id": "diagnostic_services",
+      "name": "Diagnostic Services",
+      "shared": false,
+      "used_by": [
+        "garage"
+      ]
+    },
+    {
+      "id": "engine_repair_services",
+      "name": "Engine Repair Services",
+      "shared": false,
+      "used_by": [
+        "garage"
+      ]
+    },
+    {
+      "id": "body_services",
+      "name": "Body & Panel Services",
+      "shared": false,
+      "used_by": [
+        "garage"
+      ]
+    },
+    {
+      "id": "tyre_services",
+      "name": "Tyre & Wheel Services",
+      "shared": false,
+      "used_by": [
+        "garage"
+      ]
+    },
+    {
+      "id": "general_service_maintenance",
+      "name": "General Service & Maintenance",
+      "shared": false,
+      "used_by": [
+        "garage"
+      ]
+    }
+  ]
+}

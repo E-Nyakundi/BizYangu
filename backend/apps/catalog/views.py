@@ -106,7 +106,20 @@ def product_list_create(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    product = serializer.save(business=business)
+    # Find-or-create by name when no category id was given but a name
+    # was — the path taxonomy-driven onboarding uses, since it only
+    # knows a taxonomy category's display name, never a pre-existing
+    # Category id. Mirrors the CSV import path's category_cache pattern.
+    category_name = serializer.validated_data.get('category_name', '').strip()
+    if not category and category_name:
+        category, _ = Category.objects.get_or_create(business=business, name=category_name)
+
+    product = serializer.save(business=business, category=category)
+
+    if product.cost_price is not None:
+        from apps.reports.services import check_confidence_to_act_milestone
+        check_confidence_to_act_milestone(business)
+
     return Response(ProductSerializer(product).data, status=status.HTTP_201_CREATED)
 
 
@@ -138,7 +151,11 @@ def product_detail(request, product_id):
         serializer.is_valid(raise_exception=True)
         # Block changing SKU directly
         serializer.validated_data.pop('sku', None)
+        cost_price_touched = 'cost_price' in serializer.validated_data
         serializer.save()
+        if cost_price_touched:
+            from apps.reports.services import check_confidence_to_act_milestone
+            check_confidence_to_act_milestone(business)
         return Response(ProductSerializer(product).data)
 
     # DELETE — soft delete
@@ -184,6 +201,10 @@ def product_csv_import(request):
         )
 
     result = parse_product_csv(csv_file, business)
+
+    if result['imported'] > 0:
+        from apps.reports.services import check_confidence_to_act_milestone
+        check_confidence_to_act_milestone(business)
 
     response_status = status.HTTP_200_OK if result['imported'] > 0 else status.HTTP_400_BAD_REQUEST
     return Response(result, status=response_status)

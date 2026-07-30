@@ -17,7 +17,7 @@
 
   After it finishes:
     - If you only changed something in the browser dev flow, just restart
-      `npm run dev` (frontend) and the Django server (backend) â€" they read
+      `npm run dev` (frontend) and the Django server (backend)  -- they read
       .env / .env.local fresh on start.
     - If you are testing the Android APK, NEXT_PUBLIC_API_URL is baked in at
       `next build` time, so you MUST rebuild + re-sync + reinstall:
@@ -42,10 +42,12 @@ $files = @(
 
 Write-Host "Starting cloudflared tunnel to localhost:$Port ..." -ForegroundColor Cyan
 
-# Launch cloudflared, capture stdout+stderr as it logs to stderr by default
+# Launch cloudflared -- it logs its tunnel URL to stderr, so that's the file we
+# actually watch below. stdout is redirected to a separate throwaway file since
+# Start-Process refuses to point both streams at the same path.
 $proc = Start-Process -FilePath "cloudflared" `
     -ArgumentList "tunnel --url http://localhost:$Port" `
-    -NoNewWindow -PassThru -RedirectStandardError "cloudflared_out.log" -RedirectStandardOutput "cloudflared_out.log"
+    -NoNewWindow -PassThru -RedirectStandardError "cloudflared_out.log" -RedirectStandardOutput "cloudflared_stdout.log"
 
 $newUrl = $null
 $timeout = (Get-Date).AddSeconds(30)
@@ -66,7 +68,7 @@ if (-not $newUrl) {
 }
 
 Write-Host "New tunnel URL: $newUrl" -ForegroundColor Green
-Write-Host "cloudflared is running in the background as PID $($proc.Id) â€" leave it running." -ForegroundColor Yellow
+Write-Host "cloudflared is running in the background as PID $($proc.Id)  -- leave it running." -ForegroundColor Yellow
 
 # Regex matches any *.trycloudflare.com hostname currently in each file
 $pattern = "[a-z0-9\-]+\.trycloudflare\.com"

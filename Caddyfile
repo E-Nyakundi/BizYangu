@@ -1,0 +1,11 @@
+# BizYangu — Caddy reverse proxy
+#
+# Caddy gets a Let's Encrypt certificate for this domain automatically —
+# no manual certbot steps — as long as DNS for it already points at this
+# VM's public IP before you start this container (Let's Encrypt has to
+# be able to reach it to verify).
+#
+# Replace with your actual API subdomain.
+api.biasharasystems.co.ke {
+    reverse_proxy backend:8000
+}

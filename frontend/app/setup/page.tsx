@@ -1,20 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { setupBusiness } from '@/lib/business'
+import { listBusinessTypes } from '@/lib/knowledge'
 import { apiErrorMessage } from '@/lib/auth'
 import Deepfield from '@/components/deepfield'
 import { COPY } from '@/lib/copy'
-import type { BusinessType } from '@/lib/types'
+import type { BusinessTypeInfo } from '@/lib/types'
 
-const BUSINESS_TYPES: { value: BusinessType; label: string }[] = [
-  { value: 'DUKA', label: COPY.SETUP_CATEGORY_DUKA },
-  { value: 'HARDWARE', label: COPY.SETUP_CATEGORY_HARDWARE },
-  { value: 'BOUTIQUE', label: COPY.SETUP_CATEGORY_BOUTIQUE },
-  { value: 'STATIONERY', label: COPY.SETUP_CATEGORY_STATIONERY },
-  { value: 'CUSTOM', label: COPY.SETUP_CATEGORY_CUSTOM },
-]
+// Sentinel for "doesn't fit any of the real taxonomy types" — not part of
+// knowledge/business_types.json, handled as a local fallback. Every real
+// taxonomy type still goes through Business.type='CUSTOM' + custom_type_name
+// on submit (see finishSetup below) since the legacy Type enum only covers
+// 7 of the 9+ taxonomy types — custom_type_name is what actually renders,
+// taxonomy_type_id is what Phase 4's product onboarding keys off of.
+const OTHER_ID = '__OTHER__'
 
 export default function SetupPage() {
   const router = useRouter()
@@ -24,8 +25,30 @@ export default function SetupPage() {
 
   // Screen 1
   const [name, setName] = useState('')
-  const [type, setType] = useState<BusinessType>('DUKA')
+  const [businessTypes, setBusinessTypes] = useState<BusinessTypeInfo[]>([])
+  const [loadingTypes, setLoadingTypes] = useState(true)
+  const [selectedId, setSelectedId] = useState<string>('')
   const [customTypeName, setCustomTypeName] = useState('')
+
+  useEffect(() => {
+    listBusinessTypes()
+      .then((types) => {
+        setBusinessTypes(types)
+        // Default to the first real type rather than leaving nothing
+        // selected — matches the old hardcoded list always defaulting
+        // to DUKA, so screen 1 is submittable without a click if the
+        // owner's business happens to be the first one shown.
+        if (types.length > 0) setSelectedId(types[0].id)
+      })
+      .catch(() => {
+        // Taxonomy fetch failed — fall back to "Other" only, so setup
+        // is never fully blocked by this endpoint being unreachable.
+        setSelectedId(OTHER_ID)
+      })
+      .finally(() => setLoadingTypes(false))
+  }, [])
+
+  const selectedType = businessTypes.find((t) => t.id === selectedId) ?? null
 
   // Screen 2
   const [paymentMode, setPaymentMode] = useState<'till' | 'paybill' | 'skip'>('till')
@@ -36,7 +59,7 @@ export default function SetupPage() {
   function goNextFromScreen1(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    if (type === 'CUSTOM' && !customTypeName.trim()) {
+    if (selectedId === OTHER_ID && !customTypeName.trim()) {
       setError(COPY.ERRORS.BUSINESS_TYPE_REQUIRED)
       return
     }
@@ -54,8 +77,9 @@ export default function SetupPage() {
     try {
       await setupBusiness({
         name: name.trim(),
-        type,
-        custom_type_name: type === 'CUSTOM' ? customTypeName.trim() : undefined,
+        type: 'CUSTOM',
+        custom_type_name: selectedId === OTHER_ID ? customTypeName.trim() : selectedType?.name,
+        taxonomy_type_id: selectedId === OTHER_ID ? undefined : selectedId,
         mpesa_till_number: paymentMode === 'till' ? tillNumber.trim() : undefined,
         mpesa_paybill_number: paymentMode === 'paybill' ? paybillNumber.trim() : undefined,
         mpesa_business_shortcode: paymentMode === 'paybill' ? shortcode.trim() : undefined,
@@ -92,21 +116,33 @@ export default function SetupPage() {
             />
 
             <label style={{ display: 'block', marginBottom: 'var(--sp-2)', fontSize: 'var(--fs-sm)' }}>{COPY.SETUP_BUSINESS_TYPE_LABEL}</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-2)', marginBottom: 'var(--sp-4)' }}>
-              {BUSINESS_TYPES.map((bt) => (
+            {loadingTypes ? (
+              <p style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-sm)', marginBottom: 'var(--sp-4)' }}>{COPY.STOCK_LOADING}</p>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-2)', marginBottom: 'var(--sp-4)' }}>
+                {businessTypes.map((bt) => (
+                  <button
+                    key={bt.id}
+                    type="button"
+                    onClick={() => setSelectedId(bt.id)}
+                    className={selectedId === bt.id ? 'btn-primary' : 'btn-secondary'}
+                    style={{ justifyContent: 'center' }}
+                  >
+                    {bt.name}
+                  </button>
+                ))}
                 <button
-                  key={bt.value}
                   type="button"
-                  onClick={() => setType(bt.value)}
-                  className={type === bt.value ? 'btn-primary' : 'btn-secondary'}
+                  onClick={() => setSelectedId(OTHER_ID)}
+                  className={selectedId === OTHER_ID ? 'btn-primary' : 'btn-secondary'}
                   style={{ justifyContent: 'center' }}
                 >
-                  {bt.label}
+                  {COPY.SETUP_CATEGORY_CUSTOM}
                 </button>
-              ))}
-            </div>
+              </div>
+            )}
 
-            {type === 'CUSTOM' && (
+            {selectedId === OTHER_ID && (
               <input
                 className="input"
                 value={customTypeName}
@@ -194,7 +230,7 @@ export default function SetupPage() {
 
             <div className="card-stat" style={{ marginBottom: 'var(--sp-5)' }}>
               <SummaryRow label={COPY.SETUP_SUMMARY_NAME} value={name} />
-              <SummaryRow label={COPY.SETUP_SUMMARY_TYPE} value={type === 'CUSTOM' ? customTypeName : BUSINESS_TYPES.find((b) => b.value === type)?.label ?? ''} />
+              <SummaryRow label={COPY.SETUP_SUMMARY_TYPE} value={selectedId === OTHER_ID ? customTypeName : selectedType?.name ?? ''} />
               <SummaryRow
                 label={COPY.SETUP_SUMMARY_PAYMENT}
                 value={

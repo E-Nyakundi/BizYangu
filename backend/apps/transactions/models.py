@@ -34,7 +34,7 @@ class Transaction(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     business = models.ForeignKey('business.Business', on_delete=models.PROTECT, related_name='transactions')
     type = models.CharField(max_length=15, choices=Type.choices, default=Type.SALE)
-    reference_number = models.CharField(max_length=20, unique=True, blank=True)
+    reference_number = models.CharField(max_length=20, blank=True)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     payment_method = models.CharField(max_length=10, choices=PaymentMethod.choices, default=PaymentMethod.CASH)
     payment_status = models.CharField(max_length=12, choices=PaymentStatus.choices, default=PaymentStatus.CONFIRMED)
@@ -57,9 +57,30 @@ class Transaction(models.Model):
         'self', on_delete=models.SET_NULL,
         null=True, blank=True, related_name='refunds',
     )
+    # Phase 12 (customer ledger) — added by migration 0005 but missing
+    # from this model until now, same gap as Business.taxonomy_type_id
+    # and Product's Phase 11 fields. Set on CREDIT sales to link the
+    # sale to a Customer for balance tracking; blank for cash/M-Pesa
+    # sales with no associated customer.
+    customer = models.ForeignKey(
+        'customers.Customer', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='transactions',
+    )
 
     class Meta:
         ordering = ['-created_at']
+        # reference_number is only meant to be unique *within* a business
+        # (each business's own BY-YYYY-NNNN counter starts at 0001) --
+        # _generate_reference() below already scopes its lookup this way.
+        # A bare unique=True on the field was enforcing global uniqueness
+        # instead, so a second business's first-ever sale would collide
+        # with any other business's BY-2026-0001.
+        constraints = [
+            models.UniqueConstraint(
+                fields=['business', 'reference_number'],
+                name='unique_business_reference_number',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.reference_number} — {self.total_amount} KES'
@@ -117,7 +138,25 @@ class Transaction(models.Model):
 
 class TransactionItem(models.Model):
     transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, related_name='items')
-    product = models.ForeignKey('catalog.Product', on_delete=models.PROTECT, related_name='transaction_items')
+    # Nullable + SET_NULL for "sell an item not in the catalog" line items
+    # (Phase 9, sell-without-inventory) — those have no Product to point at.
+    # Every other TransactionItem (sale of a real product, stock-in,
+    # adjustment, refund of a catalog item) always sets this.
+    product = models.ForeignKey(
+        'catalog.Product', on_delete=models.SET_NULL, related_name='transaction_items',
+        null=True, blank=True,
+    )
+    # Set only when product is None — the freeform name the cashier typed
+    # for a not-in-catalog item. Ignored/blank for normal catalog sales,
+    # where product.name is the source of truth.
+    name = models.CharField(max_length=200, blank=True)
+    # True for ordinary catalog sales (the default — nothing to reconcile).
+    # False for not-in-catalog items: they were sold without ever touching
+    # inventory, so they're flagged here for an owner/manager to reconcile
+    # later (e.g. add "camel set" to the catalog retroactively, or confirm
+    # it was truly one-off). No reconciliation UI exists yet — this field
+    # just marks the items that will need one.
+    is_reconciled = models.BooleanField(default=True)
     quantity = models.DecimalField(max_digits=12, decimal_places=3)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)  # Snapshot at time of sale
     cost_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)  # Snapshot
@@ -136,7 +175,8 @@ class TransactionItem(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f'{self.product.name} × {self.quantity}'
+        name = self.product.name if self.product_id else (self.name or 'Custom item')
+        return f'{name} × {self.quantity}'
 
 
 # NOTE: Stock deduction for SALE transactions is handled explicitly inside

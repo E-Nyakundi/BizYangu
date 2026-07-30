@@ -3,10 +3,15 @@
  */
 
 import { api } from './api'
-import type { PaymentMethod, Transaction } from './types'
+import type { PaymentMethod, Transaction, Product } from './types'
 
 export interface SaleLineItemPayload {
-  product_id: string
+  // Catalog item: product_id only. Freeform item (Phase 9, sell-without-
+  // inventory): name + unit_price instead, no product_id. Mutually
+  // exclusive — the backend rejects both or neither being present.
+  product_id?: string
+  name?: string
+  unit_price?: string
   quantity: string
 }
 
@@ -65,5 +70,45 @@ export interface RefundCreatePayload {
  */
 export async function refundTransaction(payload: RefundCreatePayload): Promise<{ detail: string; transaction: Transaction }> {
   const { data } = await api.post('/transactions/refund/', payload)
+  return data
+}
+
+// ── Reconciliation queue (Phase 9.2, minimal) ─────────────────────────────────
+// Closes the loop on the freeform/"custom" items above: once a cashier
+// rings up something not in the catalog, it sits here until an
+// owner/manager links it to a real product on the Stock page.
+
+export interface UnreconciledGroup {
+  name: string
+  item_count: number
+  total_quantity: string
+  total_value: string
+  first_sold_at: string
+  last_sold_at: string
+}
+
+export async function listUnreconciled(): Promise<UnreconciledGroup[]> {
+  const { data } = await api.get('/transactions/unreconciled/')
+  return data
+}
+
+export interface ResolveUnreconciledPayload {
+  name: string
+  // Exactly one of these — pick an existing product, or create a new one.
+  product_id?: string
+  new_product?: {
+    name?: string
+    selling_price: string
+    cost_price?: string
+    unit?: string
+    current_stock?: string
+    low_stock_threshold?: string
+  }
+}
+
+export async function resolveUnreconciled(
+  payload: ResolveUnreconciledPayload
+): Promise<{ product: Product; resolved_count: number }> {
+  const { data } = await api.post('/transactions/unreconciled/resolve/', payload)
   return data
 }

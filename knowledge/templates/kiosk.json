@@ -1,0 +1,351 @@
+{
+  "business_type_id": "kiosk",
+  "kind": "goods",
+  "_notes": [
+    "General small retailer / duka. This is deliberately the broadest,",
+    "shallowest template — a kiosk's whole value is stocking a bit of",
+    "everything, not depth in any one category. References several shared",
+    "categories (see categories.json).",
+    "Growth-path starting point (kiosk -> retailer -> wholesaler -> mart ->",
+    "supermarket) — explicitly not implemented, noted for later only.",
+    "July 2026 decision: M-Pesa float (airtime_mobile_money category) is confirmed excluded from regular stock tracking -- see the item-level 'stock_tracking': 'excluded' flag. This is a taxonomy-level flag only; actual float-balance handling in the app's schema is not yet built."
+  ],
+  "categories": [
+    {
+      "category_id": "staple_foods",
+      "shared_reference": true,
+      "items": [
+        {
+          "name": "Maize flour (unga)",
+          "brands": [
+            "Jogoo",
+            "Pembe",
+            "Hostess"
+          ],
+          "units": [
+            "kg",
+            "packet"
+          ]
+        },
+        {
+          "name": "Wheat flour",
+          "brands": [
+            "Exe",
+            "Ajab",
+            "Kifaru"
+          ],
+          "units": [
+            "kg",
+            "packet"
+          ]
+        },
+        {
+          "name": "Sugar",
+          "brands": [],
+          "units": [
+            "kg",
+            "packet"
+          ]
+        },
+        {
+          "name": "Rice",
+          "brands": [
+            "Pearl",
+            "Mwea Pishori"
+          ],
+          "units": [
+            "kg",
+            "packet"
+          ]
+        },
+        {
+          "name": "Cooking oil",
+          "brands": [
+            "Fresh Fri",
+            "Golden Fry",
+            "Rina",
+            "Elianto"
+          ],
+          "units": [
+            "litre"
+          ]
+        },
+        {
+          "name": "Salt",
+          "brands": [],
+          "units": [
+            "packet"
+          ]
+        },
+        {
+          "name": "Tea leaves",
+          "brands": [
+            "Ketepa",
+            "Kericho Gold",
+            "Chai Bora"
+          ],
+          "units": [
+            "packet"
+          ]
+        },
+        {
+          "name": "Bread",
+          "brands": [
+            "Broadways",
+            "Supa Loaf",
+            "Festive"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Milk",
+          "brands": [
+            "Brookside",
+            "KCC",
+            "Tuzo",
+            "Fresha"
+          ],
+          "units": [
+            "packet",
+            "litre"
+          ]
+        },
+        {
+          "name": "Eggs",
+          "brands": [],
+          "units": [
+            "piece",
+            "dozen"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "household_essentials",
+      "shared_reference": true,
+      "items": [
+        {
+          "name": "Washing powder/detergent",
+          "brands": [
+            "Omo",
+            "Ariel",
+            "Sunlight"
+          ],
+          "units": [
+            "packet"
+          ]
+        },
+        {
+          "name": "Bar soap",
+          "brands": [
+            "Geisha",
+            "Ushindi",
+            "Jamaa"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Matchbox",
+          "brands": [],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Candles",
+          "brands": [],
+          "units": [
+            "piece",
+            "packet"
+          ]
+        },
+        {
+          "name": "Cooking gas refill",
+          "brands": [
+            "K-Gas",
+            "Total Gas",
+            "Pro Gas",
+            "Afrigas"
+          ],
+          "units": [
+            "piece"
+          ],
+          "notes": "cylinder size is a variant (6kg/13kg), not a separate item"
+        }
+      ]
+    },
+    {
+      "category_id": "toiletries_personal_care",
+      "shared_reference": true,
+      "items": [
+        {
+          "name": "Toilet paper",
+          "brands": [
+            "Rosy",
+            "Softcare",
+            "Chandaria"
+          ],
+          "units": [
+            "piece",
+            "packet"
+          ]
+        },
+        {
+          "name": "Toothpaste",
+          "brands": [
+            "Colgate",
+            "Close-Up",
+            "Aquafresh"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Sanitary pads",
+          "brands": [
+            "Always",
+            "Sunny Girl",
+            "Molpes"
+          ],
+          "units": [
+            "packet"
+          ]
+        },
+        {
+          "name": "Petroleum jelly",
+          "brands": [
+            "Vaseline",
+            "Ushindi"
+          ],
+          "units": [
+            "piece"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "soft_drinks_water",
+      "shared_reference": true,
+      "items": [
+        {
+          "name": "Soda",
+          "brands": [
+            "Coca-Cola",
+            "Pepsi",
+            "Stoney"
+          ],
+          "units": [
+            "bottle",
+            "can"
+          ]
+        },
+        {
+          "name": "Bottled water",
+          "brands": [
+            "Dasani",
+            "Keringet",
+            "Aquamist"
+          ],
+          "units": [
+            "bottle"
+          ]
+        },
+        {
+          "name": "Juice",
+          "brands": [
+            "Del Monte",
+            "Afia",
+            "Sunny"
+          ],
+          "units": [
+            "packet",
+            "bottle"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "tobacco",
+      "shared_reference": true,
+      "items": [
+        {
+          "name": "Cigarettes",
+          "brands": [
+            "Sportsman",
+            "Embassy",
+            "Rooster"
+          ],
+          "units": [
+            "packet",
+            "piece"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "snacks_confectionery",
+      "shared_reference": true,
+      "items": [
+        {
+          "name": "Sweets/candy",
+          "brands": [],
+          "units": [
+            "piece",
+            "packet"
+          ]
+        },
+        {
+          "name": "Biscuits",
+          "brands": [
+            "Britania",
+            "Nice n Lite",
+            "Manji"
+          ],
+          "units": [
+            "packet"
+          ]
+        },
+        {
+          "name": "Crisps",
+          "brands": [
+            "Tropical Heat",
+            "Simba Chips"
+          ],
+          "units": [
+            "packet"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "airtime_mobile_money",
+      "items": [
+        {
+          "name": "Airtime scratch card",
+          "brands": [
+            "Safaricom",
+            "Airtel",
+            "Telkom"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "M-Pesa float",
+          "brands": [],
+          "units": [
+            "piece"
+          ],
+          "notes": "DECISION (July 2026): float is cash-equivalent, not a stocked physical item -- explicitly excluded from normal has_inventory/Product stock tracking. Needs its own float-balance handling in a later phase's schema, not modeled as a regular Product. Was previously an open question -- now resolved to 'special/no stock tracking', implementation still pending.",
+          "stock_tracking": "excluded"
+        }
+      ]
+    }
+  ]
+}

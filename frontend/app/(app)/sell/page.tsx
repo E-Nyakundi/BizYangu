@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/auth'
 import { listProducts } from '@/lib/catalog'
+import { groupByCategory } from '@/lib/grouping'
 import { createSale } from '@/lib/transactions'
 import { initiateStkPush, pollStkStatus } from '@/lib/payments'
 import { enqueue, queueLength, syncQueue } from '@/lib/offline-queue'
@@ -22,6 +23,11 @@ import { COPY } from '@/lib/copy'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000/api/v1'
 const WS_BASE = API_BASE.replace(/^http/, 'ws').replace('/api/v1', '')
+
+// Sentinel for the "no category set" chip — distinct from `null` (which
+// means the "All" chip / no filter applied) since category_name itself
+// can genuinely be null for a real product.
+const UNCATEGORIZED = '__uncategorized__'
 
 // ── WhatsApp receipt helper ───────────────────────────────────────────────────
 // NOTE: This builds the customer-facing receipt message shared over WhatsApp.
@@ -52,6 +58,27 @@ function buildWhatsAppReceipt(txn: Transaction, businessName: string): string {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+function CategoryChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        flexShrink: 0,
+        padding: 'var(--sp-1) var(--sp-3)',
+        borderRadius: 'var(--radius-pill)',
+        border: `1px solid ${active ? 'var(--color-teal)' : 'var(--surface-4)'}`,
+        background: active ? 'rgba(0,229,196,0.1)' : 'var(--surface-2)',
+        color: active ? 'var(--color-teal)' : 'var(--color-muted)',
+        cursor: 'pointer', fontSize: 'var(--fs-xs)', fontFamily: 'var(--font-display)',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </button>
+  )
+}
 
 function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }) {
   const outOfStock = product.track_stock && Number(product.current_stock) <= 0
@@ -96,6 +123,78 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
   )
 }
 
+function CustomItemForm({
+  initialName,
+  onAdd,
+  onCancel,
+}: {
+  initialName: string
+  onAdd: (name: string, price: number) => void
+  onCancel: () => void
+}) {
+  const [name, setName] = useState(initialName)
+  const [price, setPrice] = useState('')
+  const nameRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    nameRef.current?.focus()
+  }, [])
+
+  const priceValue = Number(price)
+  const canAdd = name.trim().length > 0 && price.trim().length > 0 && priceValue > 0
+
+  function submit() {
+    if (!canAdd) return
+    onAdd(name.trim(), priceValue)
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 'var(--sp-4)', padding: 'var(--sp-4)' }}>
+      <h3 style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, marginBottom: 'var(--sp-3)' }}>
+        {COPY.SELL_CUSTOM_ITEM_TITLE}
+      </h3>
+      <label style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', display: 'block', marginBottom: 'var(--sp-1)' }}>
+        {COPY.SELL_CUSTOM_ITEM_NAME_LABEL}
+      </label>
+      <input
+        ref={nameRef}
+        className="input"
+        type="text"
+        placeholder={COPY.SELL_CUSTOM_ITEM_NAME_PLACEHOLDER}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        maxLength={200}
+        style={{ width: '100%', marginBottom: 'var(--sp-3)' }}
+      />
+      <label style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', display: 'block', marginBottom: 'var(--sp-1)' }}>
+        {COPY.SELL_CUSTOM_ITEM_PRICE_LABEL}
+      </label>
+      <input
+        className="input mono"
+        type="number"
+        inputMode="decimal"
+        min="0"
+        placeholder="0"
+        value={price}
+        onChange={(e) => setPrice(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && submit()}
+        style={{ width: '100%', marginBottom: 'var(--sp-3)' }}
+      />
+      <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-3)' }}>
+        {COPY.SELL_CUSTOM_ITEM_HINT}
+      </p>
+      <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+        <button className="btn-ghost" onClick={onCancel} style={{ flex: 1 }}>
+          {COPY.SELL_CUSTOM_ITEM_CANCEL_BTN}
+        </button>
+        <button className="btn-primary" onClick={submit} disabled={!canAdd} style={{ flex: 1 }}>
+          {COPY.SELL_CUSTOM_ITEM_ADD_BTN}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function CartRow({
   item,
   onInc,
@@ -114,7 +213,14 @@ function CartRow({
       padding: 'var(--sp-3) 0', borderBottom: '1px solid var(--surface-3)',
     }}>
       <div style={{ flex: 1 }}>
-        <div style={{ fontWeight: 600, fontSize: 'var(--fs-sm)' }}>{item.product.name}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+          <span style={{ fontWeight: 600, fontSize: 'var(--fs-sm)' }}>{item.product.name}</span>
+          {item.isCustom && (
+            <span className="badge badge-muted" style={{ fontSize: 'var(--fs-xs)' }}>
+              {COPY.SELL_CUSTOM_ITEM_BADGE}
+            </span>
+          )}
+        </div>
         <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>
           KES {Number(item.product.selling_price).toLocaleString()} × {item.quantity}
         </div>
@@ -403,10 +509,17 @@ export default function SellPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [search, setSearch] = useState('')
+  // null = "All", UNCATEGORIZED sentinel = the no-category bucket,
+  // anything else = an exact category_name to filter down to.
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
   // Cart
   const [cart, setCart] = useState<CartItem[]>([])
+
+  // Custom item (Phase 9, sell-without-inventory) — a not-in-catalog item
+  // the cashier is about to add via a name + price
+  const [customItemOpen, setCustomItemOpen] = useState(false)
 
   // Payment
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH')
@@ -505,12 +618,21 @@ export default function SellPage() {
 
   // ── Filtered products ─────────────────────────────────────────────────────
 
-  const filteredProducts = products.filter((p) =>
-    p.is_active && (
+  const activeProducts = products.filter((p) => p.is_active)
+  const categoryGroups = groupByCategory(activeProducts)
+  // Only show chips at all once there's something to actually filter by —
+  // a business with everything in one bucket (or nothing categorized)
+  // doesn't need a single "All" chip cluttering the screen.
+  const showCategoryChips = categoryGroups.length > 1
+
+  const filteredProducts = activeProducts.filter((p) => {
+    if (categoryFilter === UNCATEGORIZED && p.category_name) return false
+    if (categoryFilter && categoryFilter !== UNCATEGORIZED && p.category_name !== categoryFilter) return false
+    return (
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.sku.toLowerCase().includes(search.toLowerCase())
     )
-  )
+  })
 
   // ── Cart actions ──────────────────────────────────────────────────────────
 
@@ -526,6 +648,35 @@ export default function SellPage() {
       }
       return [...prev, { product, quantity: 1 }]
     })
+  }, [])
+
+  // Adds a freeform "not in catalog" item (Phase 9, sell-without-inventory).
+  // Built as a synthetic client-only Product so the rest of the cart UI
+  // (CartRow, quantity +/-, total calc) works unchanged. track_stock: false
+  // means quantity has no upper bound, matching a real non-tracked product.
+  const addCustomToCart = useCallback((name: string, unitPrice: number) => {
+    const now = new Date().toISOString()
+    const syntheticProduct: Product = {
+      id: `custom-${crypto.randomUUID()}`,
+      name,
+      sku: '',
+      barcode: null,
+      selling_price: String(unitPrice),
+      cost_price: null,
+      unit: 'piece',
+      current_stock: '0',
+      low_stock_threshold: '0',
+      track_stock: false,
+      image: null,
+      is_active: true,
+      category: null,
+      category_name: null,
+      stock_status: 'OK',
+      created_at: now,
+      updated_at: now,
+    }
+    setCart((prev) => [...prev, { product: syntheticProduct, quantity: 1, isCustom: true }])
+    setCustomItemOpen(false)
   }, [])
 
   const removeFromCart = useCallback((productId: string) => {
@@ -562,10 +713,18 @@ export default function SellPage() {
     setSubmitError('')
 
     const payload = {
-      items: cart.map((item) => ({
-        product_id: item.product.id,
-        quantity: String(item.quantity),
-      })),
+      items: cart.map((item) =>
+        item.isCustom
+          ? {
+              name: item.product.name,
+              unit_price: item.product.selling_price,
+              quantity: String(item.quantity),
+            }
+          : {
+              product_id: item.product.id,
+              quantity: String(item.quantity),
+            }
+      ),
       payment_method: paymentMethod,
       mpesa_reference: paymentMethod === 'MPESA' ? '' : mpesaRef.trim(), // STK path sets ref later
       notes: notes.trim(),
@@ -705,9 +864,45 @@ export default function SellPage() {
             placeholder={COPY.SELL_SEARCH_FULL_PLACEHOLDER}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ marginBottom: 'var(--sp-4)', width: '100%' }}
+            style={{ marginBottom: 'var(--sp-3)', width: '100%' }}
             autoFocus
           />
+
+          {showCategoryChips && (
+            <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-3)', overflowX: 'auto', paddingBottom: 2 }}>
+              <CategoryChip
+                label={COPY.SELL_CATEGORY_ALL}
+                active={categoryFilter === null}
+                onClick={() => setCategoryFilter(null)}
+              />
+              {categoryGroups.map((g) => (
+                <CategoryChip
+                  key={g.categoryName ?? UNCATEGORIZED}
+                  label={`${g.categoryName ?? COPY.SELL_CATEGORY_UNCATEGORIZED} (${g.items.length})`}
+                  active={categoryFilter === (g.categoryName ?? UNCATEGORIZED)}
+                  onClick={() => setCategoryFilter(g.categoryName ?? UNCATEGORIZED)}
+                />
+              ))}
+            </div>
+          )}
+
+          {!customItemOpen && (
+            <button
+              className="btn-ghost"
+              onClick={() => setCustomItemOpen(true)}
+              style={{ fontSize: 'var(--fs-xs)', marginBottom: 'var(--sp-4)' }}
+            >
+              {COPY.SELL_ADD_CUSTOM_ITEM_BTN}
+            </button>
+          )}
+
+          {customItemOpen && (
+            <CustomItemForm
+              initialName={search}
+              onAdd={addCustomToCart}
+              onCancel={() => setCustomItemOpen(false)}
+            />
+          )}
 
           {loadingProducts ? (
             <div style={{ color: 'var(--color-muted)', textAlign: 'center', padding: 'var(--sp-7)' }}>
@@ -716,6 +911,13 @@ export default function SellPage() {
           ) : filteredProducts.length === 0 ? (
             <div style={{ color: 'var(--color-muted)', textAlign: 'center', padding: 'var(--sp-7)' }}>
               {search ? COPY.SELL_EMPTY_SEARCH.replace('{search}', search) : COPY.SELL_EMPTY_NONE}
+              {search && !customItemOpen && (
+                <div style={{ marginTop: 'var(--sp-3)' }}>
+                  <button className="btn-secondary" onClick={() => setCustomItemOpen(true)}>
+                    {COPY.SELL_SELL_ANYWAY_BTN.replace('{search}', search)}
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--sp-3)' }}>

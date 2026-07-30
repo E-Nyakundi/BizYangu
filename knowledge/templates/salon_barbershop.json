@@ -1,0 +1,185 @@
+{
+  "business_type_id": "salon_barbershop",
+  "kind": "service",
+  "_notes": [
+    "Service categories have NO brand or unit fields — priced per service,",
+    "not stocked. 'unit' for a service is always 'service' or 'session'",
+    "(see units.json) rather than a physical unit of measure.",
+    "'retail_addon' section covers the small amount of physical product a",
+    "salon/barbershop commonly also sells (goods, not services) — this is",
+    "the has_inventory=true slice of an otherwise has_inventory=false",
+    "business, per Build Plan v3 §2.1/§2.2."
+  ],
+  "categories": [
+    {
+      "category_id": "hair_services",
+      "subcategories": [
+        {
+          "subcategory_id": "hair_services_cut",
+          "items": [
+            {
+              "name": "Haircut (men)",
+              "unit": "service"
+            },
+            {
+              "name": "Haircut (women)",
+              "unit": "service"
+            },
+            {
+              "name": "Kids haircut",
+              "unit": "service"
+            },
+            {
+              "name": "Trim/line-up",
+              "unit": "service"
+            }
+          ]
+        },
+        {
+          "subcategory_id": "hair_services_color",
+          "items": [
+            {
+              "name": "Hair coloring/dye",
+              "unit": "service"
+            },
+            {
+              "name": "Highlights",
+              "unit": "service"
+            }
+          ]
+        },
+        {
+          "subcategory_id": "hair_services_treatment",
+          "items": [
+            {
+              "name": "Relaxing/perming",
+              "unit": "service"
+            },
+            {
+              "name": "Braiding",
+              "unit": "service"
+            },
+            {
+              "name": "Weaving/extensions",
+              "unit": "service"
+            },
+            {
+              "name": "Deep conditioning treatment",
+              "unit": "service"
+            },
+            {
+              "name": "Wash & blow-dry",
+              "unit": "service"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "grooming_services",
+      "subcategories": [
+        {
+          "subcategory_id": "grooming_shave",
+          "items": [
+            {
+              "name": "Shave (clean shave)",
+              "unit": "service"
+            },
+            {
+              "name": "Beard trim/shape-up",
+              "unit": "service"
+            },
+            {
+              "name": "Hot towel shave",
+              "unit": "service"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "nail_services",
+      "items": [
+        {
+          "name": "Manicure",
+          "unit": "service"
+        },
+        {
+          "name": "Pedicure",
+          "unit": "service"
+        },
+        {
+          "name": "Nail art/gel",
+          "unit": "service"
+        }
+      ]
+    },
+    {
+      "category_id": "skin_beauty_services",
+      "items": [
+        {
+          "name": "Facial",
+          "unit": "service"
+        },
+        {
+          "name": "Eyebrow shaping/threading",
+          "unit": "service"
+        },
+        {
+          "name": "Makeup application",
+          "unit": "session"
+        }
+      ]
+    }
+  ],
+  "retail_addon": {
+    "kind": "goods",
+    "category_id": "hair_beauty_retail_addon",
+    "items": [
+      {
+        "name": "Hair oil/gel",
+        "brands": [
+          "Dark and Lovely",
+          "Sofn'Free",
+          "Motions"
+        ],
+        "units": [
+          "piece"
+        ]
+      },
+      {
+        "name": "Shampoo/conditioner",
+        "brands": [
+          "TCB",
+          "Dark and Lovely",
+          "Organics"
+        ],
+        "units": [
+          "piece"
+        ]
+      },
+      {
+        "name": "Weave/extensions (retail)",
+        "brands": [
+          "Darling",
+          "Sleek",
+          "Vixen"
+        ],
+        "units": [
+          "piece"
+        ]
+      },
+      {
+        "name": "Nail polish",
+        "brands": [
+          "OPI",
+          "Sally Hansen",
+          "Miss Rose"
+        ],
+        "units": [
+          "piece"
+        ]
+      }
+    ]
+  }
+}

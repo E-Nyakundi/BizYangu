@@ -16,10 +16,25 @@ class BusinessSetupSerializer(serializers.ModelSerializer):
     class Meta:
         model = Business
         fields = [
-            'name', 'type', 'custom_type_name',
+            'name', 'type', 'custom_type_name', 'taxonomy_type_id',
             'mpesa_till_number', 'mpesa_paybill_number', 'mpesa_business_shortcode',
             'address', 'currency', 'timezone',
         ]
+
+    def validate_taxonomy_type_id(self, value):
+        # Blank is valid — covers pre-Phase-8 businesses and the "Other /
+        # doesn't fit" fallback in setup, where there's deliberately no
+        # taxonomy match. Only reject a non-blank value that doesn't
+        # correspond to a real business_types.json entry, since a typo'd
+        # or stale ID here would silently break Phase 4's taxonomy-driven
+        # onboarding for that business further down the line.
+        if not value:
+            return value
+        from apps.knowledge.loader import list_business_types
+        valid_ids = {bt['id'] for bt in list_business_types()}
+        if value not in valid_ids:
+            raise serializers.ValidationError('Unknown business type ID.')
+        return value
 
     def validate(self, attrs):
         if attrs.get('type') == Business.Type.CUSTOM and not attrs.get('custom_type_name'):
@@ -42,7 +57,7 @@ class BusinessProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Business
         fields = [
-            'id', 'name', 'type', 'custom_type_name',
+            'id', 'name', 'type', 'custom_type_name', 'taxonomy_type_id',
             'mpesa_till_number', 'mpesa_paybill_number', 'mpesa_business_shortcode',
             'address', 'location_lat', 'location_lng', 'currency', 'timezone',
             'owner_name', 'owner_phone',
@@ -68,7 +83,7 @@ class BusinessUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Business
         fields = [
-            'name', 'type', 'custom_type_name',
+            'name', 'type', 'custom_type_name', 'taxonomy_type_id',
             'mpesa_till_number', 'mpesa_paybill_number', 'mpesa_business_shortcode',
             'address', 'location_lat', 'location_lng', 'currency', 'timezone',
         ]

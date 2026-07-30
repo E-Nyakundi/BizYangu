@@ -1,0 +1,170 @@
+{
+  "business_type_id": "cereals_grains",
+  "kind": "goods",
+  "_notes": [
+    "Overlaps with wholesale_foodstuffs_dry (wholesale template) and",
+    "staple_foods (kiosk template) — deliberately kept as a separate,",
+    "deeper template rather than merged, since a dedicated cereals/grains",
+    "shop goes far deeper on this one category group than a kiosk or",
+    "general wholesaler would. Perishability tracking (Build Plan v3,",
+    "Phase 11) is directly relevant here — grains are inorganic/expiry-",
+    "dated in the sense of shelf life, not organic spoilage — flagging the",
+    "connection, not building it here.",
+    "Sold both loose (by weight, gorogoro) and pre-packaged — both unit",
+    "styles included.",
+    "July 2026 decision: animal feed / feed by-products do NOT belong in this template -- they're an agrovet concern, and 'agrovet' is not yet one of the 9 first-cohort business types. 'Bran/animal feed by-product' was removed from flour_milled_products accordingly. Adding agrovet as a business type (with its own feed/veterinary/seed categories) is future Phase 8 scope, not started."
+  ],
+  "categories": [
+    {
+      "category_id": "grains_cereals",
+      "items": [
+        {
+          "name": "Maize (whole grain)",
+          "brands": [],
+          "units": [
+            "gorogoro",
+            "kg",
+            "sack_50kg"
+          ]
+        },
+        {
+          "name": "Rice",
+          "brands": [
+            "Pearl Rice",
+            "Mwea Pishori"
+          ],
+          "units": [
+            "gorogoro",
+            "kg",
+            "sack_50kg"
+          ]
+        },
+        {
+          "name": "Sorghum",
+          "brands": [],
+          "units": [
+            "gorogoro",
+            "kg"
+          ]
+        },
+        {
+          "name": "Millet",
+          "brands": [],
+          "units": [
+            "gorogoro",
+            "kg"
+          ]
+        },
+        {
+          "name": "Wheat (whole grain)",
+          "brands": [],
+          "units": [
+            "kg",
+            "sack_50kg"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "legumes_pulses",
+      "items": [
+        {
+          "name": "Beans (various)",
+          "brands": [],
+          "units": [
+            "gorogoro",
+            "kg"
+          ],
+          "notes": "variety (rosecoco, mwitemania, yellow beans etc.) is a variant, not a separate item at this taxonomy level"
+        },
+        {
+          "name": "Green grams (ndengu)",
+          "brands": [],
+          "units": [
+            "gorogoro",
+            "kg"
+          ]
+        },
+        {
+          "name": "Lentils",
+          "brands": [],
+          "units": [
+            "gorogoro",
+            "kg"
+          ]
+        },
+        {
+          "name": "Groundnuts (raw)",
+          "brands": [],
+          "units": [
+            "gorogoro",
+            "kg"
+          ]
+        },
+        {
+          "name": "Peas (dried)",
+          "brands": [],
+          "units": [
+            "gorogoro",
+            "kg"
+          ]
+        },
+        {
+          "name": "Soya beans",
+          "brands": [],
+          "units": [
+            "gorogoro",
+            "kg"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "flour_milled_products",
+      "items": [
+        {
+          "name": "Maize flour (unga)",
+          "brands": [
+            "Jogoo",
+            "Pembe",
+            "Soko",
+            "Hostess"
+          ],
+          "units": [
+            "kg",
+            "packet"
+          ]
+        },
+        {
+          "name": "Wheat flour",
+          "brands": [
+            "Exe",
+            "Ajab",
+            "Pembe",
+            "Kifaru"
+          ],
+          "units": [
+            "kg",
+            "packet"
+          ]
+        },
+        {
+          "name": "Millet flour",
+          "brands": [],
+          "units": [
+            "kg",
+            "packet"
+          ]
+        },
+        {
+          "name": "Sorghum flour",
+          "brands": [],
+          "units": [
+            "kg",
+            "packet"
+          ]
+        }
+      ]
+    }
+  ]
+}

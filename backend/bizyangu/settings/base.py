@@ -34,6 +34,8 @@ INSTALLED_APPS = [
     'apps.payments',
     'apps.reports',
     'apps.notifications',
+    'apps.customers',
+    'apps.knowledge',
 ]
 
 MIDDLEWARE = [
@@ -159,9 +161,53 @@ CELERY_BROKER_URL = config('REDIS_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://localhost:6379/0')
 CELERY_TIMEZONE = 'Africa/Nairobi'
 
+# STK Push timeout sweep (Phase 1 of the pilot-path plan). Daraja's own
+# STK prompt itself expires client-side in ~60-100s, but a dropped
+# tunnel or network hiccup means the callback that would normally tell
+# us that can simply never arrive — leaving a sale sitting PENDING with
+# stock already deducted, with no automatic way out. This periodic task
+# (apps.payments.tasks.check_stale_stk_requests) sweeps for exactly that
+# and auto-voids anything still PENDING past this many minutes, reusing
+# the same void-and-restore-stock logic the real FAILED callback uses.
+# Padded well past Daraja's own prompt window to comfortably avoid
+# voiding a sale where the customer is just slow to respond.
+STK_TIMEOUT_MINUTES = config('STK_TIMEOUT_MINUTES', default=10, cast=int)
+
+CELERY_BEAT_SCHEDULE = {
+    'check-stale-stk-requests': {
+        'task': 'apps.payments.tasks.check_stale_stk_requests',
+        # Sweep every 5 minutes — frequent enough that a stuck sale
+        # doesn't sit blocking stock for long, infrequent enough not to
+        # hammer the DB with a query that will almost always find nothing.
+        'schedule': 300.0,
+    },
+}
+
+# Cache — this was previously UNSET, which meant Django silently fell back
+# to its default LocMemCache: per-process, in-memory, not shared across
+# worker processes. Every DRF throttle (OTPRateThrottle, and the
+# UserRateThrottle/AnonRateThrottle/ScopedRateThrottle added for general
+# API rate limiting) tracks its counters through Django's cache framework —
+# with LocMemCache, a rate meant to be "300/minute per user" was actually
+# "300/minute per user PER WORKER PROCESS", i.e. silently multiplied by
+# however many gunicorn/uwsgi workers are running. Pointing this at the
+# same Redis instance already used for Channels/Celery makes throttle
+# counts (and any other cache.get/set call anywhere in the app) actually
+# shared across every worker and every process.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': config('REDIS_URL', default='redis://localhost:6379/0'),
+    }
+}
+
 # Africa's Talking
 AT_USERNAME = config('AT_USERNAME', default='sandbox')
 AT_API_KEY = config('AT_API_KEY', default='')
+# Blank until a Kenyan Sender ID registration is approved (see
+# BizYangu_Path_to_Pilot.md). Blank = AT's shared default sender,
+# unchanged from before this setting existed.
+AT_SENDER_ID = config('AT_SENDER_ID', default='')
 
 # M-Pesa Daraja
 MPESA_CONSUMER_KEY = config('MPESA_CONSUMER_KEY', default='')

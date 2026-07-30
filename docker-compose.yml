@@ -60,6 +60,15 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      # knowledge/ sits at repo root, sibling to backend/ — loader.py
+      # resolves its path as Path(BASE_DIR).parent / 'knowledge', which
+      # only works if that same sibling relationship exists inside the
+      # container too. Without this, the container has no /knowledge at
+      # all and every /api/v1/knowledge/ endpoint 500s with
+      # FileNotFoundError, even though the exact same code works fine
+      # outside Docker (venv runs) where backend/ and knowledge/ really
+      # are siblings on disk.
+      - ./knowledge:/knowledge
     depends_on:
       postgres:
         condition: service_healthy
@@ -78,7 +87,7 @@ services:
     container_name: bizyango_frontend
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: https://pixels-acknowledged-chef-topics.trycloudflare.com/api/v1
+      NEXT_PUBLIC_API_URL: https://trends-powell-guam-wal.trycloudflare.com/api/v1
     ports:
       - "3000:3000"
     volumes:

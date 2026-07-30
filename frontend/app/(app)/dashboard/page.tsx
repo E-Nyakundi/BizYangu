@@ -12,7 +12,7 @@ import Link from 'next/link'
 import { useAuthStore, logout } from '@/lib/auth'
 import { useRouter } from 'next/navigation'
 import { COPY } from '@/lib/copy'
-import { getDashboard, type DashboardReport } from '@/lib/reports'
+import { getDashboard, getDataHealth, getMilestones, type DashboardReport, type DataHealth, type Milestone } from '@/lib/reports'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000/api/v1'
 const WS_BASE = API_BASE.replace(/^http/, 'ws').replace('/api/v1', '')
@@ -33,21 +33,61 @@ export default function DashboardPage() {
   const setUser = useAuthStore((s) => s.setUser)
 
   const [report, setReport] = useState<DashboardReport | null>(null)
+  const [dataHealth, setDataHealth] = useState<DataHealth | null>(null)
+  const [celebration, setCelebration] = useState<Milestone | null>(null)
+  const celebratedIds = useRef<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [isLive, setIsLive] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
+  const canSeeDataHealth = user?.role === 'OWNER' || user?.role === 'MANAGER'
 
   const refetch = useCallback(() => {
     getDashboard()
       .then((r) => { setReport(r); setError(false) })
       .catch(() => setError(true))
       .finally(() => setLoading(false))
-  }, [])
+    // Owner/manager only, matching the endpoint's own permission — a
+    // cashier account would just get a guaranteed 403, so skip the call
+    // entirely rather than fetch-and-fail silently.
+    if (canSeeDataHealth) {
+      getDataHealth().then(setDataHealth).catch(() => {/* passive feature — quietly absent on failure */})
+
+      // Milestones are recorded server-side at the exact moment they
+      // happen — "is this new enough to celebrate right now" is left to
+      // the frontend (see lib/reports.ts). A milestone counts as
+      // "just happened" if achieved within the last 2 minutes, which
+      // comfortably covers the round-trip from the triggering action
+      // (sale, reconciliation, cost-price save) to this refetch — the
+      // WS tick that follows any of those fires within seconds, not
+      // minutes. celebratedIds prevents re-showing the same milestone
+      // on every subsequent tick while it's still within that window.
+      getMilestones().then((milestones) => {
+        const fresh = milestones.find((m) => {
+          if (celebratedIds.current.has(m.id)) return false
+          const ageMs = Date.now() - new Date(m.achieved_at).getTime()
+          return ageMs >= 0 && ageMs < 2 * 60 * 1000
+        })
+        if (fresh) {
+          celebratedIds.current.add(fresh.id)
+          setCelebration(fresh)
+        }
+      }).catch(() => {/* passive feature — quietly absent on failure */})
+    }
+  }, [canSeeDataHealth])
 
   useEffect(() => {
     refetch()
   }, [refetch])
+
+  // Auto-dismiss the celebration banner — matches the "never blocking"
+  // design constraint. Long enough to actually read, short enough not
+  // to linger and start feeling like clutter.
+  useEffect(() => {
+    if (!celebration) return
+    const timer = setTimeout(() => setCelebration(null), 8000)
+    return () => clearTimeout(timer)
+  }, [celebration])
 
   // ── Live feed: a 'dashboard.tick' event over ws/dashboard/{business_id}/
   // means a sale/refund/void/stock-movement just landed elsewhere (another
@@ -86,6 +126,24 @@ export default function DashboardPage() {
 
   return (
     <main style={{ padding: 'var(--sp-6) var(--sp-5)', maxWidth: 720 }}>
+
+      {/* Milestone celebration — passive (auto-dismisses, click to
+          dismiss early), never blocking, matches the tone constraint:
+          a real earned moment, not a manufactured "you unlocked a
+          badge" mechanic. */}
+      {celebration && (
+        <div
+          onClick={() => setCelebration(null)}
+          style={{
+            background: 'rgba(0,229,196,0.08)', border: '1px solid var(--color-teal)',
+            borderRadius: 'var(--radius-card)', padding: 'var(--sp-3) var(--sp-4)',
+            marginBottom: 'var(--sp-4)', cursor: 'pointer',
+            fontSize: 'var(--fs-sm)', color: 'var(--color-teal)',
+          }}
+        >
+          🎉 {celebration.message}
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 'var(--sp-6)' }}>
@@ -284,6 +342,39 @@ export default function DashboardPage() {
               </>
             )}
           </div>
+
+          {/* Data Health — passive, owner/manager only, never blocking.
+              Deliberately absent (not even an empty-state card) when
+              score is null: a brand-new business with no data yet has
+              nothing meaningful to show, and an empty gauge would just
+              be clutter, not a nudge. */}
+          {canSeeDataHealth && dataHealth && dataHealth.score !== null && (
+            <div className="card" style={{ marginBottom: 'var(--sp-5)', padding: 'var(--sp-4)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-2)' }}>
+                <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>
+                  {COPY.DASHBOARD_DATA_HEALTH_TITLE}
+                </span>
+                <span
+                  className="mono"
+                  style={{
+                    fontSize: 'var(--fs-md)', fontWeight: 700,
+                    color: dataHealth.score >= 70 ? 'var(--color-teal)' : dataHealth.score >= 40 ? 'var(--color-amber)' : 'var(--color-error)',
+                  }}
+                >
+                  {Math.round(dataHealth.score)}%
+                </span>
+              </div>
+              {dataHealth.worst_dimension ? (
+                <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', margin: 0 }}>
+                  {dataHealth.worst_dimension.reason}
+                </p>
+              ) : (
+                <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', margin: 0 }}>
+                  {COPY.DASHBOARD_DATA_HEALTH_PERFECT}
+                </p>
+              )}
+            </div>
+          )}
 
           <Link href="/reports" className="btn-secondary" style={{ display: 'block', textAlign: 'center', fontSize: 'var(--fs-xs)' }}>
             {COPY.DASHBOARD_VIEW_REPORTS}

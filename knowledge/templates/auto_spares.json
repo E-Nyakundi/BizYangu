@@ -1,0 +1,342 @@
+{
+  "business_type_id": "auto_spares",
+  "kind": "goods",
+  "_notes": [
+    "Parts retailer. Often combined with a garage on the same premises —",
+    "see combinable_with in business_types.json. This template covers",
+    "PARTS only; labor/repair services belong to the garage template.",
+    "Vehicle make/model fitment (e.g. 'brake pads — Toyota Probox') is a",
+    "real and important variant dimension for this business type that this",
+    "taxonomy level doesn't attempt to capture — items are generic part",
+    "types here; make/model-specific fitment would be a per-business",
+    "product detail, not a taxonomy branch (100s of make/model",
+    "combinations would defeat the 'curated, not complete' principle)."
+  ],
+  "categories": [
+    {
+      "category_id": "engine_parts",
+      "subcategories": [
+        {
+          "subcategory_id": "engine_parts_ignition",
+          "items": [
+            {
+              "name": "Spark plug",
+              "brands": [
+                "NGK",
+                "Denso",
+                "Bosch",
+                "Champion"
+              ],
+              "units": [
+                "piece",
+                "set"
+              ]
+            },
+            {
+              "name": "Ignition coil",
+              "brands": [
+                "Bosch",
+                "Denso",
+                "Delphi",
+                "NGK"
+              ],
+              "units": [
+                "piece"
+              ]
+            }
+          ]
+        },
+        {
+          "subcategory_id": "engine_parts_belts_gaskets",
+          "items": [
+            {
+              "name": "Fan belt",
+              "brands": [],
+              "units": [
+                "piece"
+              ]
+            },
+            {
+              "name": "Timing belt",
+              "brands": [],
+              "units": [
+                "piece"
+              ]
+            },
+            {
+              "name": "Head gasket",
+              "brands": [],
+              "units": [
+                "piece"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "suspension_steering",
+      "items": [
+        {
+          "name": "Shock absorber",
+          "brands": [
+            "Monroe",
+            "KYB",
+            "Gabriel",
+            "Bilstein"
+          ],
+          "units": [
+            "piece",
+            "pair"
+          ]
+        },
+        {
+          "name": "Bushings",
+          "brands": [],
+          "units": [
+            "piece",
+            "set"
+          ]
+        },
+        {
+          "name": "Tie rod end",
+          "brands": [],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Ball joint",
+          "brands": [],
+          "units": [
+            "piece"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "brakes",
+      "items": [
+        {
+          "name": "Brake pads",
+          "brands": [
+            "Bendix",
+            "Ferodo",
+            "TRW",
+            "Brembo"
+          ],
+          "units": [
+            "set"
+          ]
+        },
+        {
+          "name": "Brake disc/rotor",
+          "brands": [
+            "Bendix",
+            "TRW",
+            "Brembo"
+          ],
+          "units": [
+            "piece",
+            "pair"
+          ]
+        },
+        {
+          "name": "Brake fluid",
+          "brands": [
+            "Total",
+            "Castrol",
+            "ATE",
+            "Prestone"
+          ],
+          "units": [
+            "litre"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "electrical_auto",
+      "items": [
+        {
+          "name": "Headlight bulb",
+          "brands": [
+            "Philips",
+            "Osram",
+            "Bosch",
+            "Narva"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Alternator",
+          "brands": [
+            "Bosch",
+            "Denso",
+            "Valeo",
+            "Delco"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Starter motor",
+          "brands": [
+            "Bosch",
+            "Denso",
+            "Valeo",
+            "Delco"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Fuse",
+          "brands": [],
+          "units": [
+            "piece",
+            "packet"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "body_parts",
+      "items": [
+        {
+          "name": "Side mirror",
+          "brands": [],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Bumper",
+          "brands": [],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Windscreen wiper blade",
+          "brands": [
+            "Bosch",
+            "Valeo",
+            "Champion",
+            "Denso"
+          ],
+          "units": [
+            "piece",
+            "pair"
+          ]
+        },
+        {
+          "name": "Headlamp assembly",
+          "brands": [],
+          "units": [
+            "piece"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "fluids_filters",
+      "items": [
+        {
+          "name": "Engine oil",
+          "brands": [
+            "Total",
+            "Shell Helix",
+            "Castrol",
+            "Mobil"
+          ],
+          "units": [
+            "litre"
+          ]
+        },
+        {
+          "name": "Oil filter",
+          "brands": [
+            "Bosch",
+            "Fram",
+            "Mann Filter",
+            "Denso"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Air filter",
+          "brands": [
+            "Bosch",
+            "Fram",
+            "Mann Filter",
+            "Denso"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Fuel filter",
+          "brands": [
+            "Bosch",
+            "Fram",
+            "Mann Filter",
+            "Denso"
+          ],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Coolant",
+          "brands": [
+            "Total",
+            "Castrol",
+            "Prestone",
+            "Shell"
+          ],
+          "units": [
+            "litre"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "tyres_batteries",
+      "items": [
+        {
+          "name": "Tyre",
+          "brands": [
+            "Bridgestone",
+            "Yokohama",
+            "Sportmax",
+            "Dunlop"
+          ],
+          "units": [
+            "piece"
+          ],
+          "notes": "size (e.g. 175/65R14) is a variant, not a separate item"
+        },
+        {
+          "name": "Car battery",
+          "brands": [
+            "Chloride Exide",
+            "AMG",
+            "Yuasa",
+            "Bosch"
+          ],
+          "units": [
+            "piece"
+          ]
+        }
+      ]
+    }
+  ]
+}

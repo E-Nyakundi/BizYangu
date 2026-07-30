@@ -1,0 +1,384 @@
+{
+  "business_type_id": "bar",
+  "kind": "goods",
+  "_notes": [
+    "Licensing / age-verification workflow flagged in discussion as a",
+    "separate future concern — not part of this taxonomy.",
+    "References shared categories: soft_drinks_water, tobacco,",
+    "snacks_confectionery (see categories.json).",
+    "July 2026 decision: chang'aa/local traditional spirits (Muratina, etc.) excluded from the taxonomy for now, licensing sensitivity unresolved. Removed the 'spirits_local_traditional' subcategory entirely -- revisit if/when the licensing question gets a real answer."
+  ],
+  "categories": [
+    {
+      "category_id": "beer",
+      "subcategories": [
+        {
+          "subcategory_id": "beer_lager",
+          "items": [
+            {
+              "name": "Tusker",
+              "brands": [
+                "Tusker"
+              ],
+              "units": [
+                "bottle",
+                "crate"
+              ]
+            },
+            {
+              "name": "White Cap",
+              "brands": [
+                "White Cap"
+              ],
+              "units": [
+                "bottle",
+                "crate"
+              ]
+            },
+            {
+              "name": "Balozi",
+              "brands": [
+                "Balozi"
+              ],
+              "units": [
+                "bottle",
+                "crate"
+              ]
+            },
+            {
+              "name": "Pilsner",
+              "brands": [
+                "Pilsner"
+              ],
+              "units": [
+                "bottle",
+                "crate"
+              ]
+            },
+            {
+              "name": "Guinness (lager-adjacent, see stout)",
+              "brands": [
+                "Guinness"
+              ],
+              "units": [
+                "bottle",
+                "crate"
+              ]
+            }
+          ]
+        },
+        {
+          "subcategory_id": "beer_stout_dark",
+          "items": [
+            {
+              "name": "Guinness",
+              "brands": [
+                "Guinness"
+              ],
+              "units": [
+                "bottle",
+                "crate"
+              ]
+            },
+            {
+              "name": "Senator Keg",
+              "brands": [
+                "Senator"
+              ],
+              "units": [
+                "litre"
+              ],
+              "notes": "sold by the keg/glass in a licensed premise — variant, not separate item"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "spirits",
+      "subcategories": [
+        {
+          "subcategory_id": "spirits_whisky",
+          "items": [
+            {
+              "name": "Whisky (various)",
+              "brands": [
+                "Johnnie Walker",
+                "Jameson",
+                "VAT 69",
+                "Chrome"
+              ],
+              "units": [
+                "ml",
+                "bottle"
+              ]
+            }
+          ]
+        },
+        {
+          "subcategory_id": "spirits_vodka",
+          "items": [
+            {
+              "name": "Vodka (various)",
+              "brands": [
+                "Smirnoff",
+                "County Vodka",
+                "Chrome",
+                "Kenya Cane"
+              ],
+              "units": [
+                "ml",
+                "bottle"
+              ]
+            }
+          ]
+        },
+        {
+          "subcategory_id": "spirits_gin",
+          "items": [
+            {
+              "name": "Gin (various)",
+              "brands": [
+                "Gilbey's",
+                "Gordon's",
+                "County Gin",
+                "Tanqueray"
+              ],
+              "units": [
+                "ml",
+                "bottle"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "wine",
+      "items": [
+        {
+          "name": "Red wine",
+          "brands": [
+            "Drostdy Hof",
+            "Four Cousins",
+            "Robertson's",
+            "Nederburg"
+          ],
+          "units": [
+            "bottle"
+          ]
+        },
+        {
+          "name": "White wine",
+          "brands": [
+            "Drostdy Hof",
+            "Four Cousins",
+            "Robertson's",
+            "Nederburg"
+          ],
+          "units": [
+            "bottle"
+          ]
+        },
+        {
+          "name": "Sparkling wine",
+          "brands": [
+            "Caprice",
+            "JC Le Roux",
+            "Kim Crawford"
+          ],
+          "units": [
+            "bottle"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "rtd_ciders",
+      "items": [
+        {
+          "name": "Cider",
+          "brands": [
+            "Savanna Dry",
+            "Hunters Dry",
+            "Smirnoff Ice"
+          ],
+          "units": [
+            "bottle",
+            "can"
+          ]
+        },
+        {
+          "name": "Flavoured malt drink",
+          "brands": [
+            "Smirnoff Ice",
+            "Snapp",
+            "Savanna"
+          ],
+          "units": [
+            "bottle",
+            "can"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "soft_drinks_water",
+      "shared_reference": true,
+      "items": [
+        {
+          "name": "Soda",
+          "brands": [
+            "Coca-Cola",
+            "Pepsi",
+            "Stoney"
+          ],
+          "units": [
+            "bottle",
+            "can",
+            "crate"
+          ]
+        },
+        {
+          "name": "Tonic water",
+          "brands": [
+            "Krest",
+            "Schweppes"
+          ],
+          "units": [
+            "bottle",
+            "can"
+          ]
+        },
+        {
+          "name": "Energy drink",
+          "brands": [
+            "Red Bull",
+            "Predator",
+            "Power Play",
+            "Monster"
+          ],
+          "units": [
+            "can"
+          ]
+        },
+        {
+          "name": "Bottled water",
+          "brands": [
+            "Dasani",
+            "Keringet",
+            "Aquamist"
+          ],
+          "units": [
+            "bottle",
+            "litre"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "tobacco",
+      "shared_reference": true,
+      "items": [
+        {
+          "name": "Cigarettes",
+          "brands": [
+            "Sportsman",
+            "Embassy",
+            "Rooster",
+            "Dunhill"
+          ],
+          "units": [
+            "packet",
+            "piece"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "snacks_confectionery",
+      "shared_reference": true,
+      "items": [
+        {
+          "name": "Crisps",
+          "brands": [
+            "Tropical Heat",
+            "Simba Chips",
+            "Pringles"
+          ],
+          "units": [
+            "packet"
+          ]
+        },
+        {
+          "name": "Peanuts",
+          "brands": [],
+          "units": [
+            "packet"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "bar_snacks",
+      "items": [
+        {
+          "name": "Smokies",
+          "brands": [],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Mutura",
+          "brands": [],
+          "units": [
+            "piece"
+          ]
+        },
+        {
+          "name": "Boiled eggs",
+          "brands": [],
+          "units": [
+            "piece"
+          ]
+        }
+      ]
+    },
+    {
+      "category_id": "bar_consumables",
+      "items": [
+        {
+          "name": "Ice",
+          "brands": [],
+          "units": [
+            "bag",
+            "kg"
+          ],
+          "notes": "consumable, not resold as a distinct product line in most bars — included for stock-tracking completeness"
+        },
+        {
+          "name": "Straws",
+          "brands": [],
+          "units": [
+            "packet"
+          ]
+        },
+        {
+          "name": "Napkins",
+          "brands": [],
+          "units": [
+            "packet"
+          ]
+        },
+        {
+          "name": "Bottle openers",
+          "brands": [],
+          "units": [
+            "piece"
+          ]
+        }
+      ]
+    }
+  ]
+}

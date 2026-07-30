@@ -14,9 +14,36 @@ User = get_user_model()
 
 
 class TransactionItemCreateSerializer(serializers.Serializer):
-    """Single line item in a sale. Nested inside SaleCreateSerializer."""
-    product_id = serializers.UUIDField()
+    """
+    Single line item in a sale. Nested inside SaleCreateSerializer.
+
+    Two shapes are accepted:
+      - catalog item:      { product_id, quantity }
+      - not-in-catalog:    { name, unit_price, quantity }   (no product_id)
+
+    This mirrors the frontend's addCustomToCart / handleConfirmSale split
+    in sell/page.tsx — a custom item has no real Product to reference, so
+    it carries its own name + price instead of a product_id.
+    """
+    product_id = serializers.UUIDField(required=False)
+    name = serializers.CharField(max_length=200, required=False, allow_blank=False)
+    unit_price = serializers.DecimalField(
+        max_digits=12, decimal_places=2, required=False, min_value=Decimal('0.00')
+    )
     quantity = serializers.DecimalField(max_digits=12, decimal_places=3, min_value=Decimal('0.001'))
+
+    def validate(self, attrs):
+        has_product = bool(attrs.get('product_id'))
+        has_custom = bool(attrs.get('name')) and attrs.get('unit_price') is not None
+        if not has_product and not has_custom:
+            raise serializers.ValidationError(
+                'Each item needs either product_id, or both name and unit_price for a not-in-catalog item.'
+            )
+        if has_product and has_custom:
+            raise serializers.ValidationError(
+                'Item cannot have both product_id and name/unit_price — pick one.'
+            )
+        return attrs
 
 
 class SaleCreateSerializer(serializers.Serializer):
@@ -56,8 +83,17 @@ class AdjustmentSerializer(serializers.Serializer):
 
 
 class TransactionItemSerializer(serializers.ModelSerializer):
-    product_name = serializers.CharField(source='product.name', read_only=True)
-    product_sku = serializers.CharField(source='product.sku', read_only=True)
+    # SerializerMethodField instead of source='product.name' — product is
+    # nullable for not-in-catalog items, and `source='product.name'` would
+    # raise on a None product instead of just returning null.
+    product_name = serializers.SerializerMethodField()
+    product_sku = serializers.SerializerMethodField()
+
+    def get_product_name(self, obj):
+        return obj.product.name if obj.product_id else obj.name
+
+    def get_product_sku(self, obj):
+        return obj.product.sku if obj.product_id else None
 
     class Meta:
         model = TransactionItem
@@ -75,12 +111,29 @@ class TransactionSerializer(serializers.ModelSerializer):
         # Only meaningful on SALE transactions — sum of all non-voided
         # refunds issued against this sale. Frontend uses this to show
         # "KES X refunded" on the transaction detail / history views.
+        #
+        # Prefer the queryset-level `refunded_total` annotation (see
+        # transaction_list/transaction_detail in views.py) — falling back
+        # to a live .aggregate() here only covers callers that pass an
+        # un-annotated instance directly (e.g. straight from a `.save()`
+        # in create_refund/void_transaction). The annotated path is what
+        # keeps list/detail endpoints at a fixed query count regardless of
+        # how many rows are on the page.
         if obj.type != Transaction.Type.SALE:
             return None
+        if hasattr(obj, 'refunded_total'):
+            # Annotated queryset — Sum(...) is None when there are no
+            # refunds (not 0), so check presence of the attribute itself,
+            # not its truthiness, or every zero-refund row would silently
+            # fall through to the per-row query below and reintroduce
+            # the N+1 this annotation exists to avoid.
+            if obj.refunded_total is None:
+                return '0.00'
+            return str(obj.refunded_total.quantize(Decimal('0.01')))
         total = obj.refunds.filter(is_voided=False).aggregate(
             total=Sum('total_amount')
         )['total']
-        return str(total) if total else '0.00'
+        return str(total.quantize(Decimal('0.01'))) if total else '0.00'
 
     class Meta:
         model = Transaction
@@ -118,3 +171,45 @@ class RefundCreateSerializer(serializers.Serializer):
     transaction_id = serializers.UUIDField()
     amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal('0.01'))
     reason = serializers.CharField(max_length=500)
+
+
+# ── Reconciliation queue (Phase 9.2, minimal — pilot-path plan Phase 2) ────────
+
+class UnreconciledGroupSerializer(serializers.Serializer):
+    """
+    Read-only shape for one row of GET /api/v1/transactions/unreconciled/.
+    One row per distinct freeform item name, not per sale — five separate
+    sales of "Blue Band 500g" collapse into a single queue entry with
+    item_count=5, so the owner resolves it once instead of five times.
+    """
+    name = serializers.CharField()
+    item_count = serializers.IntegerField()
+    total_quantity = serializers.DecimalField(max_digits=14, decimal_places=3)
+    total_value = serializers.DecimalField(max_digits=14, decimal_places=2)
+    first_sold_at = serializers.DateTimeField()
+    last_sold_at = serializers.DateTimeField()
+
+
+class ResolveUnreconciledSerializer(serializers.Serializer):
+    """
+    POST /api/v1/transactions/unreconciled/resolve/
+    Body: { name, product_id } to link to an existing catalog product, or
+    { name, new_product: {...} } to create one from the queue entry.
+    Exactly one of product_id / new_product must be given — never both,
+    never neither. `new_product` is validated against catalog's own
+    ProductCreateSerializer in the view, so it follows the exact same
+    rules (positive price, valid unit, etc.) as adding a product by hand.
+    """
+    name = serializers.CharField(max_length=200)
+    product_id = serializers.UUIDField(required=False)
+    new_product = serializers.DictField(required=False)
+
+    def validate(self, attrs):
+        has_product = bool(attrs.get('product_id'))
+        has_new = bool(attrs.get('new_product'))
+        if has_product == has_new:
+            raise serializers.ValidationError(
+                'Provide exactly one of product_id or new_product — pick an '
+                'existing product, or create a new one, not both or neither.'
+            )
+        return attrs

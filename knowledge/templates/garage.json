@@ -1,0 +1,61 @@
+{
+  "business_type_id": "garage",
+  "kind": "service",
+  "_notes": [
+    "Pure repair/labor service — no parts inventory of its own (parts are",
+    "either supplied by the customer, sourced ad hoc, or the garage is",
+    "combined with an auto_spares operation on the same premises — see",
+    "combinable_with in business_types.json).",
+    "Mechanic loyalty/commission arrangements (independent mechanics",
+    "working in a yard, paying a cut to the yard owner) came up in",
+    "discussion as a real pattern — that's a business-model/revenue-share",
+    "question for a future phase (multi-party transaction splitting), not",
+    "a taxonomy concern. Not addressed here."
+  ],
+  "categories": [
+    {
+      "category_id": "diagnostic_services",
+      "items": [
+        { "name": "General diagnostic check", "unit": "service" },
+        { "name": "Computer/OBD diagnostic scan", "unit": "service" }
+      ]
+    },
+    {
+      "category_id": "engine_repair_services",
+      "items": [
+        { "name": "Engine overhaul", "unit": "service" },
+        { "name": "Oil change service", "unit": "service" },
+        { "name": "Timing belt replacement (labor)", "unit": "service" },
+        { "name": "Clutch replacement (labor)", "unit": "service" },
+        { "name": "Gearbox repair (labor)", "unit": "service" }
+      ]
+    },
+    {
+      "category_id": "body_services",
+      "items": [
+        { "name": "Panel beating", "unit": "service" },
+        { "name": "Spray painting", "unit": "service" },
+        { "name": "Welding/fabrication", "unit": "service" },
+        { "name": "Dent removal", "unit": "service" }
+      ]
+    },
+    {
+      "category_id": "tyre_services",
+      "items": [
+        { "name": "Wheel alignment", "unit": "service" },
+        { "name": "Wheel balancing", "unit": "service" },
+        { "name": "Tyre fitting/replacement (labor)", "unit": "service" },
+        { "name": "Puncture repair", "unit": "service" }
+      ]
+    },
+    {
+      "category_id": "general_service_maintenance",
+      "items": [
+        { "name": "Full service (labor)", "unit": "service" },
+        { "name": "Brake service (labor)", "unit": "service" },
+        { "name": "Suspension repair (labor)", "unit": "service" },
+        { "name": "Car wash/detailing", "unit": "service" }
+      ]
+    }
+  ]
+}

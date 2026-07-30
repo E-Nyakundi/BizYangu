@@ -21,7 +21,15 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
-    category_name = serializers.CharField(source='category.name', read_only=True)
+    # default=None (not just read_only) — without it, DRF omits the key
+    # entirely for products with no category (an AttributeError on the
+    # category.name source lookup gets silently swallowed) instead of
+    # returning null. That's not just cosmetic: frontend grouping code
+    # assumes category_name is always present, even if null, and would
+    # crash sorting an uncategorized bucket keyed by `undefined` instead
+    # of `null`. apps/inventory/serializers.py's equivalent field already
+    # has this; this brings ProductSerializer in line with it.
+    category_name = serializers.CharField(source='category.name', read_only=True, default=None)
     stock_status = serializers.CharField(read_only=True)
 
     class Meta:
@@ -51,7 +59,37 @@ class ProductSerializer(serializers.ModelSerializer):
 class ProductCreateSerializer(ProductSerializer):
     """Used for creation — business is injected from the view."""
 
+    # Overrides the read-only category_name inherited from ProductSerializer
+    # (which sources from category.name for display only). Here it's a
+    # write-only get-or-create hint: pass a category name and the view
+    # will find-or-create a Category with that name for this business —
+    # the same pattern the CSV import path below already uses. Optional
+    # and independent of `category` (a PK): callers that already know a
+    # category's id can keep sending that directly; this is for callers
+    # (taxonomy-driven onboarding) that only know a category's display
+    # name, not any pre-existing id.
+    category_name = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
+    # Phase 13 (Data Health) provenance tag — write-only, creation-only
+    # (not in ProductSerializer.Meta.fields at all, so it's never
+    # touchable via a generic product update). Frontend callers that
+    # share this same create endpoint (taxonomy onboarding vs. manual
+    # Add Product) are trusted to pass the right value, same trust level
+    # as everything else in the creation payload. The reconciliation and
+    # CSV import paths set this directly server-side instead of trusting
+    # a payload value — see apps/transactions/views.py and the CSV
+    # import view below.
+    created_via = serializers.ChoiceField(choices=Product.CreationSource.choices, required=False)
+
+    class Meta(ProductSerializer.Meta):
+        # created_via is genuinely new here (unlike category_name, which
+        # was already in the parent's Meta.fields) — DRF requires every
+        # explicitly declared field to also appear in Meta.fields, so this
+        # needs its own Meta rather than just inheriting the parent's.
+        fields = ProductSerializer.Meta.fields + ['created_via']
+
     def create(self, validated_data):
+        validated_data.pop('category_name', None)  # resolved to `category` in the view, not a model field
         return Product.objects.create(**validated_data)
 
 
@@ -156,6 +194,7 @@ def parse_product_csv(file_obj, business) -> dict:
             track_stock=track_stock,
             barcode=row.get('barcode', ''),
             category=category,
+            created_via=Product.CreationSource.CSV,
         )
         imported += 1
 

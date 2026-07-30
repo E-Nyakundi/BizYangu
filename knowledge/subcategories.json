@@ -1,0 +1,126 @@
+{
+  "_notes": [
+    "Subcategories are attached to a parent category id from categories.json.",
+    "Not every category needs subcategories — added only where they carry",
+    "real distinguishing value (per v3 Principle: 'not forced everywhere').",
+    "Categories with no entries below are treated as flat (no subcategory",
+    "layer) in their templates."
+  ],
+  "subcategories": [
+    {
+      "id": "paint_interior",
+      "category_id": "paint",
+      "name": "Interior / Emulsion Paint"
+    },
+    {
+      "id": "paint_exterior",
+      "category_id": "paint",
+      "name": "Exterior / Weatherguard Paint"
+    },
+    {
+      "id": "paint_enamel_gloss",
+      "category_id": "paint",
+      "name": "Enamel / Gloss Paint"
+    },
+    {
+      "id": "plumbing_pipes_fittings",
+      "category_id": "plumbing",
+      "name": "Pipes & Fittings"
+    },
+    {
+      "id": "plumbing_sanitary_fixtures",
+      "category_id": "plumbing",
+      "name": "Sanitary Fixtures"
+    },
+    {
+      "id": "plumbing_water_storage",
+      "category_id": "plumbing",
+      "name": "Water Storage"
+    },
+    {
+      "id": "electrical_wiring_cables",
+      "category_id": "electrical",
+      "name": "Wiring & Cables"
+    },
+    {
+      "id": "electrical_switches_sockets",
+      "category_id": "electrical",
+      "name": "Switches & Sockets"
+    },
+    {
+      "id": "electrical_circuit_protection",
+      "category_id": "electrical",
+      "name": "Circuit Protection"
+    },
+    {
+      "id": "electrical_lighting",
+      "category_id": "electrical",
+      "name": "Lighting"
+    },
+    {
+      "id": "spirits_whisky",
+      "category_id": "spirits",
+      "name": "Whisky"
+    },
+    {
+      "id": "spirits_vodka",
+      "category_id": "spirits",
+      "name": "Vodka"
+    },
+    {
+      "id": "spirits_gin",
+      "category_id": "spirits",
+      "name": "Gin"
+    },
+    {
+      "id": "beer_lager",
+      "category_id": "beer",
+      "name": "Lager"
+    },
+    {
+      "id": "beer_stout_dark",
+      "category_id": "beer",
+      "name": "Stout / Dark Beer"
+    },
+    {
+      "id": "hair_services_cut",
+      "category_id": "hair_services",
+      "name": "Cut / Trim"
+    },
+    {
+      "id": "hair_services_color",
+      "category_id": "hair_services",
+      "name": "Color / Dye"
+    },
+    {
+      "id": "hair_services_treatment",
+      "category_id": "hair_services",
+      "name": "Treatment / Relaxing / Braiding"
+    },
+    {
+      "id": "grooming_shave",
+      "category_id": "grooming_services",
+      "name": "Shave / Beard Grooming"
+    },
+    {
+      "id": "engine_parts_ignition",
+      "category_id": "engine_parts",
+      "name": "Ignition System"
+    },
+    {
+      "id": "engine_parts_belts_gaskets",
+      "category_id": "engine_parts",
+      "name": "Belts & Gaskets"
+    },
+    {
+      "id": "wholesale_foodstuffs_dry",
+      "category_id": "wholesale_foodstuffs",
+      "name": "Dry Goods & Grains (bulk)"
+    },
+    {
+      "id": "wholesale_foodstuffs_cooking",
+      "category_id": "wholesale_foodstuffs",
+      "name": "Cooking Essentials (bulk)"
+    }
+  ]
+}

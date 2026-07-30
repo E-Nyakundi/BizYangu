@@ -12,6 +12,17 @@ export interface ProductCreatePayload {
   current_stock?: string
   low_stock_threshold?: string
   unit?: string
+  category?: string
+  // Find-or-create by name — used by taxonomy-driven onboarding, which
+  // only knows a taxonomy category's display name, never a pre-existing
+  // Category id. Ignored if `category` (an id) is also given.
+  category_name?: string
+  // Phase 13 (Data Health) provenance tag. Reconciliation and CSV
+  // import set this server-side instead — this is only for the two
+  // paths that share this same create endpoint (taxonomy onboarding
+  // and manual Add Product), where only the frontend knows which flow
+  // is calling.
+  created_via?: 'taxonomy' | 'manual'
 }
 
 export async function createProduct(payload: ProductCreatePayload): Promise<Product> {

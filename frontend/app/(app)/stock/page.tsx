@@ -16,8 +16,11 @@ import {
   type StockLevel,
   type StockMovement,
 } from '@/lib/inventory'
-import { createSale } from '@/lib/transactions'
-import { createProduct } from '@/lib/catalog'
+import { createSale, listUnreconciled, resolveUnreconciled, type UnreconciledGroup } from '@/lib/transactions'
+import { createProduct, listProducts } from '@/lib/catalog'
+import { PRODUCT_UNITS, productUnitLabel } from '@/lib/knowledge'
+import { groupByCategory } from '@/lib/grouping'
+import type { Product } from '@/lib/types'
 import { COPY } from '@/lib/copy'
 
 // ── Re-use transactions endpoint for stock-in / adjustment / loss ────────────
@@ -69,6 +72,49 @@ const MOVEMENT_COLOR: Record<string, string> = {
 }
 
 // ── Modal: Add Delivery ───────────────────────────────────────────────────────
+
+// ── Stock list row (one product) ──────────────────────────────────────────────
+
+function StockRow({ product: p, onClick }: { product: StockLevel; onClick: () => void }) {
+  const borderColor = p.stock_status === 'OUT' ? 'rgba(255,77,109,0.3)' : p.stock_status === 'LOW' ? 'rgba(245,158,11,0.3)' : 'var(--surface-3)'
+  return (
+    <div
+      onClick={onClick}
+      style={{
+        background: 'var(--surface-2)', borderRadius: 'var(--radius-card)',
+        padding: 'var(--sp-3) var(--sp-4)',
+        border: `1px solid ${borderColor}`,
+        cursor: 'pointer', transition: 'border-color 0.15s',
+        display: 'flex', alignItems: 'center', gap: 'var(--sp-4)',
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--color-teal)')}
+      onMouseLeave={(e) => (e.currentTarget.style.borderColor = borderColor)}
+    >
+      {/* Status bar */}
+      <div style={{ width: 3, borderRadius: 99, alignSelf: 'stretch', background: STATUS_COLOR[p.stock_status], flexShrink: 0 }} />
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {p.name}
+        </div>
+        <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>
+          {p.sku}
+        </div>
+      </div>
+
+      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 'var(--fs-md)', color: STATUS_COLOR[p.stock_status] }}>
+          {Number(p.current_stock).toLocaleString()}
+        </div>
+        <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>
+          {productUnitLabel(p.unit)} · min {Number(p.low_stock_threshold).toLocaleString()}
+        </div>
+      </div>
+
+      <div style={{ color: 'var(--color-muted)', fontSize: 18, flexShrink: 0 }}>›</div>
+    </div>
+  )
+}
 
 function StockInModal({ product, onClose, onDone }: {
   product: StockLevel
@@ -185,7 +231,7 @@ function LossModal({ product, onClose, onDone }: {
           ))}
         </div>
       </Field>
-      <Field label={COPY.STOCK_QTY_UNIT_LABEL.replace('{unit}', product.unit)}>
+      <Field label={COPY.STOCK_QTY_UNIT_LABEL.replace('{unit}', productUnitLabel(product.unit))}>
         <input className="input" type="number" min="0.001" step="any" placeholder="0"
           value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: '100%' }} />
       </Field>
@@ -263,8 +309,6 @@ function CountModal({ product, onClose, onDone }: {
 
 // ── Modal: Add new product (progressive onboarding) ──────────────────────────
 
-const UNIT_OPTIONS = ['pcs', 'kg', 'g', 'l', 'ml', 'pack', 'box'] as const
-
 function AddProductModal({ onClose, onDone }: {
   onClose: () => void
   onDone: () => void
@@ -274,7 +318,7 @@ function AddProductModal({ onClose, onDone }: {
   const [cost, setCost] = useState('')
   const [qty, setQty] = useState('')
   const [threshold, setThreshold] = useState('')
-  const [unit, setUnit] = useState<string>('pcs')
+  const [unit, setUnit] = useState<string>('piece')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [justSaved, setJustSaved] = useState(false)
@@ -296,6 +340,7 @@ function AddProductModal({ onClose, onDone }: {
         current_stock: qty.trim() || '0',
         low_stock_threshold: threshold.trim() || undefined,
         unit,
+        created_via: 'manual',
       })
       onDone()
       if (addAnother) {
@@ -348,18 +393,18 @@ function AddProductModal({ onClose, onDone }: {
       </div>
 
       <Field label={COPY.STOCK_NEW_UNIT_LABEL}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
-          {UNIT_OPTIONS.map((u) => (
-            <button key={u} type="button" onClick={() => setUnit(u)}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', maxHeight: 140, overflowY: 'auto' }}>
+          {PRODUCT_UNITS.map((u) => (
+            <button key={u.id} type="button" onClick={() => setUnit(u.id)}
               style={{
                 padding: 'var(--sp-1) var(--sp-3)',
                 borderRadius: 'var(--radius-pill)',
-                border: `1px solid ${unit === u ? 'var(--color-teal)' : 'var(--surface-4)'}`,
-                background: unit === u ? 'rgba(0,229,196,0.1)' : 'var(--surface-2)',
-                color: unit === u ? 'var(--color-teal)' : 'var(--color-muted)',
+                border: `1px solid ${unit === u.id ? 'var(--color-teal)' : 'var(--surface-4)'}`,
+                background: unit === u.id ? 'rgba(0,229,196,0.1)' : 'var(--surface-2)',
+                color: unit === u.id ? 'var(--color-teal)' : 'var(--color-muted)',
                 cursor: 'pointer', fontSize: 'var(--fs-xs)', fontFamily: 'var(--font-display)',
               }}>
-              {u}
+              {u.label}
             </button>
           ))}
         </div>
@@ -383,6 +428,204 @@ function AddProductModal({ onClose, onDone }: {
         </button>
         <button className="btn-primary" onClick={() => handleSubmit(false)} disabled={loading} style={{ flex: 1 }}>
           {loading ? COPY.STOCK_SAVING : COPY.STOCK_NEW_SUBMIT}
+        </button>
+      </div>
+    </Overlay>
+  )
+}
+
+// ── Modal: Resolve unreconciled ("Needs Review") item ────────────────────────
+// Links a freeform/custom sale item (Phase 9.1) to a real catalog product —
+// either an existing one, or a brand-new one created from the queue entry.
+// Deliberately minimal (Phase 9.2 scope): no fuzzy matching, no taxonomy
+// suggestions — just closing the loop so custom sales don't silently drift
+// stock/report data forever.
+
+function ResolveUnreconciledModal({ group, onClose, onDone }: {
+  group: UnreconciledGroup
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [tab, setTab] = useState<'existing' | 'new'>('existing')
+
+  // Existing-product tab
+  const [products, setProducts] = useState<Product[]>([])
+  const [loadingProducts, setLoadingProducts] = useState(true)
+  const [productSearch, setProductSearch] = useState('')
+  const [selectedProductId, setSelectedProductId] = useState<string>('')
+
+  // New-product tab
+  const [name, setName] = useState(group.name)
+  const [price, setPrice] = useState('')
+  const [cost, setCost] = useState('')
+  const [qty, setQty] = useState('')
+  const [threshold, setThreshold] = useState('')
+  const [unit, setUnit] = useState<string>('piece')
+
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    listProducts()
+      .then(setProducts)
+      .catch(() => {/* swallow — search still works against an empty list */})
+      .finally(() => setLoadingProducts(false))
+  }, [])
+
+  const filteredProducts = products.filter((p) =>
+    p.name.toLowerCase().includes(productSearch.toLowerCase())
+  )
+
+  async function handleSubmit() {
+    setError('')
+    if (tab === 'existing') {
+      if (!selectedProductId) { setError(COPY.RECONCILE_SELECT_PRODUCT_ERROR); return }
+      setLoading(true)
+      try {
+        await resolveUnreconciled({ name: group.name, product_id: selectedProductId })
+        onDone()
+        onClose()
+      } catch (e: unknown) {
+        const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        setError(msg || COPY.STOCK_GENERIC_ERROR)
+        setLoading(false)
+      }
+    } else {
+      if (!name.trim()) { setError(COPY.RECONCILE_NAME_ERROR); return }
+      const sellingPrice = parseFloat(price)
+      if (isNaN(sellingPrice) || sellingPrice <= 0) { setError(COPY.RECONCILE_PRICE_ERROR); return }
+      setLoading(true)
+      try {
+        await resolveUnreconciled({
+          name: group.name,
+          new_product: {
+            name: name.trim(),
+            selling_price: price.trim(),
+            cost_price: cost.trim() || undefined,
+            unit,
+            current_stock: qty.trim() || '0',
+            low_stock_threshold: threshold.trim() || undefined,
+          },
+        })
+        onDone()
+        onClose()
+      } catch (e: unknown) {
+        const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        setError(msg || COPY.STOCK_GENERIC_ERROR)
+        setLoading(false)
+      }
+    }
+  }
+
+  return (
+    <Overlay onClose={onClose}>
+      <h3 style={{ marginBottom: 'var(--sp-1)' }}>
+        {COPY.RECONCILE_MODAL_TITLE.replace('{name}', group.name)}
+      </h3>
+      <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-4)' }}>
+        {COPY.RECONCILE_MODAL_SUBTITLE
+          .replace('{count}', String(group.item_count))
+          .replace('{value}', Number(group.total_value).toLocaleString())}
+      </p>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-4)' }}>
+        {(['existing', 'new'] as const).map((t) => (
+          <button key={t} type="button" onClick={() => setTab(t)}
+            style={{
+              flex: 1,
+              padding: 'var(--sp-2) var(--sp-3)',
+              borderRadius: 'var(--radius-pill)',
+              border: `1px solid ${tab === t ? 'var(--color-teal)' : 'var(--surface-4)'}`,
+              background: tab === t ? 'rgba(0,229,196,0.1)' : 'var(--surface-2)',
+              color: tab === t ? 'var(--color-teal)' : 'var(--color-muted)',
+              cursor: 'pointer', fontSize: 'var(--fs-xs)', fontFamily: 'var(--font-display)',
+            }}>
+            {t === 'existing' ? COPY.RECONCILE_TAB_EXISTING : COPY.RECONCILE_TAB_NEW}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'existing' ? (
+        <Field label={COPY.RECONCILE_EXISTING_LABEL}>
+          <input className="input" type="search" placeholder={COPY.RECONCILE_EXISTING_PLACEHOLDER}
+            value={productSearch} onChange={(e) => setProductSearch(e.target.value)}
+            style={{ width: '100%', marginBottom: 'var(--sp-2)' }} />
+          <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--sp-1)' }}>
+            {loadingProducts ? (
+              <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', padding: 'var(--sp-2)' }}>{COPY.STOCK_LOADING}</div>
+            ) : filteredProducts.length === 0 ? (
+              <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', padding: 'var(--sp-2)' }}>{COPY.RECONCILE_EXISTING_EMPTY}</div>
+            ) : (
+              filteredProducts.map((p) => (
+                <button key={p.id} type="button" onClick={() => setSelectedProductId(p.id)}
+                  style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: 'var(--sp-2) var(--sp-3)', textAlign: 'left',
+                    borderRadius: 'var(--radius-default)',
+                    border: `1px solid ${selectedProductId === p.id ? 'var(--color-teal)' : 'var(--surface-3)'}`,
+                    background: selectedProductId === p.id ? 'rgba(0,229,196,0.08)' : 'var(--surface-2)',
+                    cursor: 'pointer', fontSize: 'var(--fs-sm)',
+                  }}>
+                  <span>{p.name}</span>
+                  <span style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-xs)' }}>KES {Number(p.selling_price).toLocaleString()}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </Field>
+      ) : (
+        <>
+          <Field label={COPY.RECONCILE_NEW_NAME_LABEL}>
+            <input className="input" type="text" value={name} onChange={(e) => setName(e.target.value)}
+              style={{ width: '100%' }} />
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-2)' }}>
+            <Field label={COPY.RECONCILE_NEW_PRICE_LABEL}>
+              <input className="input" type="number" min="0" step="any" placeholder="0"
+                inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} style={{ width: '100%' }} />
+            </Field>
+            <Field label={COPY.RECONCILE_NEW_COST_LABEL}>
+              <input className="input" type="number" min="0" step="any" placeholder="0"
+                inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} style={{ width: '100%' }} />
+            </Field>
+          </div>
+          <Field label={COPY.RECONCILE_NEW_UNIT_LABEL}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)', maxHeight: 140, overflowY: 'auto' }}>
+              {PRODUCT_UNITS.map((u) => (
+                <button key={u.id} type="button" onClick={() => setUnit(u.id)}
+                  style={{
+                    padding: 'var(--sp-1) var(--sp-3)',
+                    borderRadius: 'var(--radius-pill)',
+                    border: `1px solid ${unit === u.id ? 'var(--color-teal)' : 'var(--surface-4)'}`,
+                    background: unit === u.id ? 'rgba(0,229,196,0.1)' : 'var(--surface-2)',
+                    color: unit === u.id ? 'var(--color-teal)' : 'var(--color-muted)',
+                    cursor: 'pointer', fontSize: 'var(--fs-xs)', fontFamily: 'var(--font-display)',
+                  }}>
+                  {u.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-2)' }}>
+            <Field label={COPY.STOCK_NEW_QTY_LABEL}>
+              <input className="input" type="number" min="0" step="any" placeholder="0"
+                inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: '100%' }} />
+            </Field>
+            <Field label={COPY.STOCK_NEW_THRESHOLD_LABEL}>
+              <input className="input" type="number" min="0" step="any" placeholder="0"
+                inputMode="decimal" value={threshold} onChange={(e) => setThreshold(e.target.value)} style={{ width: '100%' }} />
+            </Field>
+          </div>
+        </>
+      )}
+
+      {error && <ErrorMsg>{error}</ErrorMsg>}
+
+      <div style={{ display: 'flex', gap: 'var(--sp-3)', marginTop: 'var(--sp-2)' }}>
+        <button className="btn-ghost" onClick={onClose} disabled={loading} style={{ flex: 1 }}>{COPY.CANCEL}</button>
+        <button className="btn-primary" onClick={handleSubmit} disabled={loading} style={{ flex: 2 }}>
+          {loading ? COPY.RECONCILE_SUBMIT_LOADING : COPY.RECONCILE_SUBMIT}
         </button>
       </div>
     </Overlay>
@@ -570,6 +813,8 @@ export default function StockPage() {
   const [filter, setFilter] = useState<'ALL' | 'LOW' | 'OUT'>('ALL')
   const [selected, setSelected] = useState<StockLevel | null>(null)
   const [showAddProduct, setShowAddProduct] = useState(false)
+  const [unreconciled, setUnreconciled] = useState<UnreconciledGroup[]>([])
+  const [resolveTarget, setResolveTarget] = useState<UnreconciledGroup | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -580,7 +825,17 @@ export default function StockPage() {
     finally { setLoading(false) }
   }, [search])
 
+  const loadUnreconciled = useCallback(async () => {
+    // Owner/manager only — matches the backend's IsOwnerOrManager gate,
+    // so a cashier hitting this would just 403. Skip the call entirely.
+    if (!canWrite) return
+    try {
+      setUnreconciled(await listUnreconciled())
+    } catch {/* swallow — non-critical, section just stays empty */}
+  }, [canWrite])
+
   useEffect(() => { load() }, [load])
+  useEffect(() => { loadUnreconciled() }, [loadUnreconciled])
 
   // Counts for filter tabs
   const lowCount = stockLevels.filter((p) => p.stock_status === 'LOW').length
@@ -665,7 +920,49 @@ export default function StockPage() {
           </div>
         )}
 
-        {/* Stock list */}
+        {/* Reconciliation queue — custom sale items not yet linked to a product */}
+        {canWrite && unreconciled.length > 0 && (
+          <div style={{
+            background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.3)',
+            borderRadius: 'var(--radius-card)', padding: 'var(--sp-4)',
+            marginBottom: 'var(--sp-4)',
+          }}>
+            <h4 style={{ margin: 0, marginBottom: 'var(--sp-1)', fontSize: 'var(--fs-sm)', color: 'var(--color-violet)' }}>
+              {COPY.RECONCILE_SECTION_TITLE} ({unreconciled.length})
+            </h4>
+            <p style={{ margin: 0, marginBottom: 'var(--sp-3)', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>
+              {COPY.RECONCILE_SECTION_SUBTITLE}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
+              {unreconciled.map((group) => (
+                <div key={group.name}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 'var(--sp-3)', padding: 'var(--sp-2) var(--sp-3)',
+                    background: 'var(--surface-2)', borderRadius: 'var(--radius-default)',
+                  }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {group.name}
+                    </div>
+                    <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>
+                      {COPY.RECONCILE_ITEM_COUNT.replace('{count}', String(group.item_count))} · KES {Number(group.total_value).toLocaleString()}
+                    </div>
+                  </div>
+                  <button className="btn-secondary btn-sm" onClick={() => setResolveTarget(group)}
+                    style={{ fontSize: 'var(--fs-xs)', flexShrink: 0 }}>
+                    {COPY.RECONCILE_RESOLVE_BUTTON}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Stock list — grouped by category so businesses with a lot of
+            products (bars, hardware, wholesale) don't scroll a flat wall
+            of items. Uncategorized items (no taxonomy/manual category
+            set) bucket at the end via groupByCategory's ordering. */}
         {loading ? (
           <div style={{ textAlign: 'center', padding: 'var(--sp-7)', color: 'var(--color-muted)' }}>{COPY.STOCK_LOADING}</div>
         ) : visible.length === 0 ? (
@@ -673,42 +970,20 @@ export default function StockPage() {
             {search ? COPY.STOCK_EMPTY_SEARCH.replace('{search}', search) : filter !== 'ALL' ? COPY.STOCK_EMPTY_FILTER : COPY.STOCK_EMPTY_NONE}
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
-            {visible.map((p) => (
-              <div key={p.id}
-                onClick={() => setSelected(p)}
-                style={{
-                  background: 'var(--surface-2)', borderRadius: 'var(--radius-card)',
-                  padding: 'var(--sp-3) var(--sp-4)',
-                  border: `1px solid ${p.stock_status === 'OUT' ? 'rgba(255,77,109,0.3)' : p.stock_status === 'LOW' ? 'rgba(245,158,11,0.3)' : 'var(--surface-3)'}`,
-                  cursor: 'pointer', transition: 'border-color 0.15s',
-                  display: 'flex', alignItems: 'center', gap: 'var(--sp-4)',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = 'var(--color-teal)')}
-                onMouseLeave={(e) => (e.currentTarget.style.borderColor = p.stock_status === 'OUT' ? 'rgba(255,77,109,0.3)' : p.stock_status === 'LOW' ? 'rgba(245,158,11,0.3)' : 'var(--surface-3)')}
-              >
-                {/* Status bar */}
-                <div style={{ width: 3, borderRadius: 99, alignSelf: 'stretch', background: STATUS_COLOR[p.stock_status], flexShrink: 0 }} />
-
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {p.name}
-                  </div>
-                  <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>
-                    {p.category_name && `${p.category_name} · `}{p.sku}
-                  </div>
+          <div>
+            {groupByCategory(visible).map((group) => (
+              <div key={group.categoryName ?? '__uncategorized__'} style={{ marginBottom: 'var(--sp-5)' }}>
+                <div className="mono" style={{
+                  fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-2)',
+                  textTransform: 'uppercase', letterSpacing: '0.05em',
+                }}>
+                  {group.categoryName ?? COPY.STOCK_UNCATEGORIZED} · {group.items.length}
                 </div>
-
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 'var(--fs-md)', color: STATUS_COLOR[p.stock_status] }}>
-                    {Number(p.current_stock).toLocaleString()}
-                  </div>
-                  <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>
-                    {p.unit} · min {Number(p.low_stock_threshold).toLocaleString()}
-                  </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
+                  {group.items.map((p) => (
+                    <StockRow key={p.id} product={p} onClick={() => setSelected(p)} />
+                  ))}
                 </div>
-
-                <div style={{ color: 'var(--color-muted)', fontSize: 18, flexShrink: 0 }}>›</div>
               </div>
             ))}
           </div>
@@ -759,6 +1034,14 @@ export default function StockPage() {
         <AddProductModal
           onClose={() => setShowAddProduct(false)}
           onDone={load}
+        />
+      )}
+
+      {resolveTarget && (
+        <ResolveUnreconciledModal
+          group={resolveTarget}
+          onClose={() => setResolveTarget(null)}
+          onDone={() => { load(); loadUnreconciled() }}
         />
       )}
 

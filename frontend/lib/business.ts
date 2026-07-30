@@ -9,6 +9,7 @@ export interface BusinessSetupPayload {
   name: string
   type: BusinessType
   custom_type_name?: string
+  taxonomy_type_id?: string
   mpesa_till_number?: string
   mpesa_paybill_number?: string
   mpesa_business_shortcode?: string
@@ -28,6 +29,7 @@ export type BusinessUpdatePayload = Partial<{
   name: string
   type: BusinessType
   custom_type_name: string
+  taxonomy_type_id: string
   mpesa_till_number: string
   mpesa_paybill_number: string
   mpesa_business_shortcode: string

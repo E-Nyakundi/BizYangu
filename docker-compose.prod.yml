@@ -1,0 +1,126 @@
+# BizYangu — Production Docker Compose (Oracle Cloud Free Tier VM)
+#
+# Runs: postgres, redis, backend (daphne via Dockerfile.prod), a Celery
+# worker, a Celery beat scheduler, and Caddy as a reverse proxy that
+# gets HTTPS automatically from Let's Encrypt for your real domain.
+# The Next.js frontend is NOT here — that's deploying to Vercel
+# separately, since it's a static export.
+#
+# Usage:
+#   cp .env.production.example .env.production   # fill in real values first
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml logs -f backend
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: bizyangu_postgres
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # No host port mapping — only reachable from other containers on this
+    # compose network, not from the internet.
+
+  redis:
+    image: redis:7-alpine
+    container_name: bizyangu_redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: bizyangu_backend
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./knowledge:/knowledge
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # No host port mapping — Caddy is the only thing that talks to this
+    # directly, on the internal compose network.
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: bizyangu_celery_worker
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./knowledge:/knowledge
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A bizyangu worker --loglevel=info
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: bizyangu_celery_beat
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - ./knowledge:/knowledge
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # This is the process that actually runs the STK-timeout cleanup
+    # job every 5 minutes (CELERY_BEAT_SCHEDULE in settings/base.py).
+    # Nothing in the old dev docker-compose.yml ran this at all.
+    command: celery -A bizyangu beat --loglevel=info
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: bizyangu_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

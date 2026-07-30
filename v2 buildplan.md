@@ -176,6 +176,11 @@ breaking the sale flow, then let the owner reconcile it afterward.
       (they still count toward revenue, just not toward per-product
       breakdowns until reconciled)
 
+-   Never block a sale.
+-   Allow unreconciled items.
+-   Maintain an Items Awaiting Reconciliation queue.
+-   Let owners create or link products later.
+-   Service businesses use this as the default workflow.
 ---
 
 ### Phase 9 — Progressive onboarding: static presets (adaptive Stage 1)
@@ -195,7 +200,17 @@ adaptive plan; this phase is Stage 1 only.
 - [ ] `has_inventory` flag (2.1) lands here, since preset data needs it to
       distinguish stocked items from services
 
----
+-   Curated JSON knowledge base.
+-   Templates contain categories, services, units, supplier types and
+    settings.
+-   Onboarding: Business Type → Suggested Categories → Review → Start
+    Selling.
+-   Inventory grows through daily operation.
+-   Instrument presets kept/removed, custom categories, brands, products
+    and units.
+
+**Design Principle:** BizYangu curates knowledge, not inventories.
+
 
 ### Phase 10 — Perishability tracking
 **Goal:** expiry-date tracking for inorganic goods; spoilage-risk as a
@@ -246,6 +261,15 @@ scheduled to a data threshold.
       changing what an individual business sees
 
 ---
+# UPDATED SECTION --- §2.2 Progressive onboarding is continuous, adaptive onboarding is smarter
+
+Onboarding is continuous rather than a one-time setup. Businesses should
+start operating within minutes, with inventory growing organically.
+Sales always take priority over inventory completeness.
+
+Knowledge base JSON should contain Business Types, Categories,
+Subcategories, Brands, Units, Supplier Types and Expense
+Categories---not a complete national product list.
 
 ### Phase 13 — More settings
 **Goal:** placeholder phase — waiting on your concrete list. Known

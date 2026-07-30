@@ -1,0 +1,72 @@
+{
+  "_notes": [
+    "First cohort of 9 business types, per discussion July 2026.",
+    "'kind' = goods | service | mixed. Governs whether stock-tracking fields",
+    "(current_stock, low_stock_threshold, unit, has_inventory) apply.",
+    "'combinable_with' flags business types commonly run as one yard/premises",
+    "(e.g. auto_spares + garage) — this is a TAGGING concern for onboarding,",
+    "not a taxonomy merge. Each keeps its own template below.",
+    "Growth-path relationships (kiosk -> retailer -> wholesaler -> mart ->",
+    "supermarket) are noted but explicitly NOT implemented yet — parked",
+    "per the July 2026 discussion."
+  ],
+  "business_types": [
+    {
+      "id": "hardware",
+      "name": "Hardware",
+      "kind": "goods",
+      "sub_niche_capable": true,
+      "notes": "Sub-niches expected over time (e.g. plumbing & electrical hardware). See knowledge/templates/hardware.json for the general template — sub-niche detection is a later phase (Build Plan v3, Phase 13), not part of this static lexicon."
+    },
+    {
+      "id": "bar",
+      "name": "Bar / Nightclub / Drinking Lounge",
+      "kind": "goods",
+      "notes": "Goods-first (drinks inventory). Licensing/age-verification workflow is a separate future concern, not part of this taxonomy."
+    },
+    {
+      "id": "kiosk",
+      "name": "Kiosk",
+      "kind": "goods",
+      "notes": "General small retailer / duka. Growth-path starting point (kiosk -> retailer -> wholesaler -> mart -> supermarket) — not implemented."
+    },
+    {
+      "id": "clothing_store",
+      "name": "Clothing Store",
+      "kind": "goods",
+      "niches": ["boutique", "school_uniforms", "mitumba"],
+      "notes": "Renamed/widened from 'boutique' per July 2026 decision -- school-uniform shops and secondhand/mitumba clothing sellers are structurally different enough from a general boutique (different suppliers, different customer relationship, different seasonal patterns) that they need their own niche templates, not just more boutique categories. 'niche' is set at business setup and determines which template's categories the business sees. Only the 'boutique' niche template exists so far (templates/clothing_store.json, niche=boutique) -- school_uniforms and mitumba are declared here but their templates are NOT yet built. Treat as an open Phase 8 follow-up, not done."
+    },
+    {
+      "id": "wholesale",
+      "name": "Wholesale",
+      "kind": "goods",
+      "notes": "Standalone business type per explicit decision, not a variant/attribute of other types. Broad by nature — template covers common wholesale goods categories rather than one narrow product line."
+    },
+    {
+      "id": "salon_barbershop",
+      "name": "Salon / Barbershop",
+      "kind": "service",
+      "notes": "No brand/unit fields — priced per service. May sell a small amount of retail goods (hair products) — see 'retail_addon' section in template."
+    },
+    {
+      "id": "cereals_grains",
+      "name": "Cereals & Grains",
+      "kind": "goods"
+    },
+    {
+      "id": "auto_spares",
+      "name": "Auto Spares",
+      "kind": "goods",
+      "combinable_with": ["garage"],
+      "notes": "Parts retailer. Often run alongside a garage on the same premises, sometimes with independent mechanics operating in the yard under a loyalty/commission arrangement with the yard owner — a business-model/revenue-share question for a later phase, not a taxonomy concern."
+    },
+    {
+      "id": "garage",
+      "name": "Garage",
+      "kind": "service",
+      "combinable_with": ["auto_spares"],
+      "notes": "Repair/labor service, no inventory of its own beyond consumables. See combinable_with note on auto_spares."
+    }
+  ]
+}

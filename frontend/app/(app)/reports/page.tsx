@@ -11,16 +11,16 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { COPY } from '@/lib/copy'
 import { shareText } from '@/lib/share-text'
 import {
-  getDailyReport, getPeriodReport, getProductPerformance, getLossReport, getEodSummary,
-  type DailyReport, type PeriodReport, type ProductPerformanceReport, type LossReport,
+  getDailyReport, getPeriodReport, getProductPerformance, getLossReport, getEodSummary, getGrowthReport,
+  type DailyReport, type PeriodReport, type ProductPerformanceReport, type LossReport, type GrowthReport,
 } from '@/lib/reports'
 
-type Tab = 'daily' | 'period' | 'products' | 'losses'
+type Tab = 'daily' | 'period' | 'growth' | 'products' | 'losses'
 
 function todayStr() {
   return new Date().toISOString().slice(0, 10)
@@ -29,6 +29,21 @@ function daysAgoStr(n: number) {
   const d = new Date()
   d.setDate(d.getDate() - n)
   return d.toISOString().slice(0, 10)
+}
+
+function GrowthBadge({ pct }: { pct: number | null }) {
+  if (pct === null) {
+    return <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>{COPY.REPORTS_GROWTH_NO_COMPARISON}</span>
+  }
+  const positive = pct >= 0
+  return (
+    <span
+      className="mono"
+      style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: positive ? 'var(--color-teal)' : 'var(--color-error)' }}
+    >
+      {positive ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}% {COPY.REPORTS_GROWTH_VS_PREVIOUS}
+    </span>
+  )
 }
 
 function StatRow({ label, value }: { label: string; value: string }) {
@@ -49,6 +64,7 @@ export default function ReportsPage() {
 
   const [daily, setDaily] = useState<DailyReport | null>(null)
   const [period, setPeriod] = useState<PeriodReport | null>(null)
+  const [growth, setGrowth] = useState<GrowthReport | null>(null)
   const [products, setProducts] = useState<ProductPerformanceReport | null>(null)
   const [losses, setLosses] = useState<LossReport | null>(null)
   const [loading, setLoading] = useState(false)
@@ -63,6 +79,7 @@ export default function ReportsPage() {
 
     if (tab === 'daily') getDailyReport(date).then(setDaily).then(done).catch(fail)
     if (tab === 'period') getPeriodReport(start, end).then(setPeriod).then(done).catch(fail)
+    if (tab === 'growth') getGrowthReport(start, end).then(setGrowth).then(done).catch(fail)
     if (tab === 'products') getProductPerformance(start, end).then(setProducts).then(done).catch(fail)
     if (tab === 'losses') getLossReport(start, end).then(setLosses).then(done).catch(fail)
   }, [tab, date, start, end])
@@ -91,6 +108,7 @@ export default function ReportsPage() {
         {([
           ['daily', COPY.REPORTS_TAB_DAILY],
           ['period', COPY.REPORTS_TAB_PERIOD],
+          ['growth', COPY.REPORTS_TAB_GROWTH],
           ['products', COPY.REPORTS_TAB_PRODUCTS],
           ['losses', COPY.REPORTS_TAB_LOSSES],
         ] as [Tab, string][]).map(([key, label]) => (
@@ -235,6 +253,82 @@ export default function ReportsPage() {
               ))
             )}
           </div>
+        </>
+      )}
+
+      {/* ── Growth tab (Phase 7) ── */}
+      {!loading && !error && tab === 'growth' && growth && (
+        <>
+          <div className="card" style={{ padding: 'var(--sp-4)', marginBottom: 'var(--sp-3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
+              <div>
+                <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>{COPY.REPORTS_GROWTH_CURRENT_PERIOD_LABEL}</div>
+                <div style={{ fontSize: 'var(--fs-lg)', fontWeight: 700 }}>
+                  KES {Number(growth.current_period.net_revenue).toLocaleString()}
+                </div>
+                <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>
+                  {growth.current_period.transaction_count} {COPY.REPORTS_TXN_COUNT_LABEL.toLowerCase()}
+                </div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <GrowthBadge pct={growth.revenue_growth_pct} />
+                <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginTop: 'var(--sp-1)' }}>
+                  {COPY.REPORTS_GROWTH_PREVIOUS_PERIOD_LABEL}: KES {Number(growth.previous_period.net_revenue).toLocaleString()}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {growth.daily_breakdown.length === 0 ? (
+            <div className="card" style={{ padding: 'var(--sp-4)', marginBottom: 'var(--sp-3)' }}>
+              <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>{COPY.REPORTS_GROWTH_NO_DATA}</p>
+            </div>
+          ) : (
+            <div className="card" style={{ padding: 'var(--sp-4)', marginBottom: 'var(--sp-3)' }}>
+              <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-2)' }}>
+                {COPY.REPORTS_GROWTH_REVENUE_CHART_TITLE}
+              </div>
+              <ResponsiveContainer width="100%" height={180}>
+                <LineChart data={growth.daily_breakdown}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-3)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} tickFormatter={(d) => d.slice(5)} />
+                  <YAxis tick={{ fontSize: 10, fill: 'var(--color-muted)' }} />
+                  <Tooltip
+                    formatter={(value: number) => [`KES ${Number(value).toLocaleString()}`, COPY.REPORTS_NET_REVENUE_LABEL]}
+                    contentStyle={{ background: 'var(--surface-2)', border: '1px solid var(--surface-3)', fontSize: 12 }}
+                  />
+                  <Line type="monotone" dataKey="revenue" stroke="var(--color-teal)" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Margin trend only renders for goods-type businesses — a service
+              business (no stock-tracked products, no cost_price data at all)
+              shouldn't see stock/margin framing that doesn't apply to it. */}
+          {growth.business_mode === 'goods' && (
+            <div className="card" style={{ padding: 'var(--sp-4)' }}>
+              <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-2)' }}>
+                {COPY.REPORTS_GROWTH_MARGIN_CHART_TITLE}
+              </div>
+              {!growth.has_margin_data ? (
+                <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>{COPY.REPORTS_GROWTH_NO_MARGIN_DATA}</p>
+              ) : (
+                <ResponsiveContainer width="100%" height={180}>
+                  <LineChart data={growth.margin_trend}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-3)" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--color-muted)' }} tickFormatter={(d) => d.slice(5)} />
+                    <YAxis tick={{ fontSize: 10, fill: 'var(--color-muted)' }} />
+                    <Tooltip
+                      formatter={(value: number) => [`KES ${Number(value).toLocaleString()}`, COPY.REPORTS_MARGIN_COL]}
+                      contentStyle={{ background: 'var(--surface-2)', border: '1px solid var(--surface-3)', fontSize: 12 }}
+                    />
+                    <Line type="monotone" dataKey="margin" stroke="var(--color-violet)" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          )}
         </>
       )}
 

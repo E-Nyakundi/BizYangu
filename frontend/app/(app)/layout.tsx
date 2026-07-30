@@ -4,7 +4,7 @@
  * BizYangu — (app) layout.
  * Auth guard + bottom nav on mobile / side nav on wider screens.
  * Demo expiry banner when days_remaining <= 3.
- * "Malipo" nav item visible to OWNER and MANAGER only.
+ * "Payments" and "Creditors" nav items visible to OWNER and MANAGER only.
  */
 
 import { useEffect } from 'react'
@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { href: '/stock', label: COPY.NAV_STOCK, icon: '📦', roles: null },
   { href: '/reports', label: COPY.NAV_REPORTS, icon: '📊', roles: null },
   { href: '/payments', label: COPY.NAV_PAYMENTS, icon: '💳', roles: ['OWNER', 'MANAGER'] as string[] },
+  { href: '/creditors', label: COPY.NAV_CREDITORS, icon: '🤝', roles: ['OWNER', 'MANAGER'] as string[] },
   { href: '/settings', label: COPY.NAV_SETTINGS, icon: '⚙', roles: null },
 ]
 

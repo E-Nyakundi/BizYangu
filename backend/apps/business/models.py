@@ -31,6 +31,13 @@ class Business(models.Model):
     name = models.CharField(max_length=200)
     type = models.CharField(max_length=20, choices=Type.choices, default=Type.DUKA)
     custom_type_name = models.CharField(max_length=100, blank=True)
+    # Links to the Phase 8 knowledge/business_types.json taxonomy (e.g.
+    # 'duka', 'hardware', 'bar') — added by migration 0002 but missing
+    # from this model until now, which meant every Business.objects.create()
+    # call was hitting a NOT NULL violation at the DB level. Blank on
+    # purpose: businesses created before Phase 8's taxonomy existed, or
+    # via the old hardcoded Type choices, have nothing to link to yet.
+    taxonomy_type_id = models.CharField(max_length=50, blank=True)
 
     # M-Pesa
     mpesa_till_number = models.CharField(max_length=20, blank=True)

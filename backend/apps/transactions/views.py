@@ -7,7 +7,8 @@ import logging
 from decimal import Decimal
 from django.contrib.auth import get_user_model
 from django.db import transaction as db_transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum, Count, Min, Max
+from django.db.models.functions import Lower
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
@@ -15,6 +16,7 @@ from rest_framework.response import Response
 
 from apps.accounts.permissions import IsNotExpired, IsOwnerOrManager, IsOwner
 from apps.catalog.models import Product
+from apps.catalog.serializers import ProductCreateSerializer, ProductSerializer
 from apps.core.messages import MESSAGES
 from apps.inventory.models import StockMovement
 from apps.reports.consumers import notify_dashboard
@@ -28,6 +30,8 @@ from .serializers import (
     RefundCreateSerializer,
     TransactionSerializer,
     VoidSerializer,
+    UnreconciledGroupSerializer,
+    ResolveUnreconciledSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -83,6 +87,25 @@ def create_sale(request):
     total = Decimal('0.00')
 
     for item_data in data['items']:
+        qty = item_data['quantity']
+
+        if not item_data.get('product_id'):
+            # Not-in-catalog item: no Product to resolve, no stock to check,
+            # no StockMovement to create — it's just a name + price the
+            # cashier typed in (sell/page.tsx addCustomToCart).
+            subtotal = qty * item_data['unit_price']
+            total += subtotal
+            line_items.append({
+                'product': None,
+                'name': item_data['name'],
+                'is_reconciled': False,
+                'quantity': qty,
+                'unit_price': item_data['unit_price'],
+                'cost_price': None,
+                'subtotal': subtotal,
+            })
+            continue
+
         try:
             product = Product.objects.get(
                 id=item_data['product_id'],
@@ -95,7 +118,6 @@ def create_sale(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        qty = item_data['quantity']
         if product.track_stock and product.current_stock < qty:
             return Response(
                 {
@@ -110,6 +132,8 @@ def create_sale(request):
         total += subtotal
         line_items.append({
             'product': product,
+            'name': '',
+            'is_reconciled': True,
             'quantity': qty,
             'unit_price': product.selling_price,
             'cost_price': product.cost_price,
@@ -141,6 +165,8 @@ def create_sale(request):
             TransactionItem.objects.create(
                 transaction=txn,
                 product=li['product'],
+                name=li['name'],
+                is_reconciled=li['is_reconciled'],
                 quantity=li['quantity'],
                 unit_price=li['unit_price'],
                 cost_price=li['cost_price'],
@@ -149,7 +175,9 @@ def create_sale(request):
             # Stock deduction happens via post_save signal in transactions/models.py
             # But the signal fires on Transaction.create, before items exist.
             # So we handle stock + movement manually here for correctness.
-            if li['product'].track_stock:
+            # li['product'] is None for not-in-catalog items — nothing to
+            # deduct or track for those, skip straight past.
+            if li['product'] and li['product'].track_stock:
                 qty_before = li['product'].current_stock
                 status_before = li['product'].stock_status
                 qty_after = qty_before - li['quantity']
@@ -168,6 +196,9 @@ def create_sale(request):
                 _notify_if_crossed_threshold(li['product'], status_before)
 
     notify_dashboard(business.id, 'sale')
+
+    from apps.reports.services import check_sale_milestones
+    check_sale_milestones(business)
 
     return Response(
         TransactionSerializer(txn).data,
@@ -367,7 +398,23 @@ def transaction_list(request):
         page = 1
     offset = (page - 1) * page_size
     total = qs.count()
-    qs = qs.prefetch_related('items__product')[offset:offset + page_size]
+    # select_related('created_by'): TransactionSerializer.created_by_name
+    # reads created_by.name — without this it's one extra query per row
+    # (50/page). annotate(refunded_total=...): TransactionSerializer used
+    # to compute this with a fresh .aggregate() call per object in
+    # get_refunded_amount — also one query per row. Both were real N+1s on
+    # this endpoint; annotating/select_related here means the whole page
+    # loads in a fixed number of queries regardless of page size.
+    qs = (
+        qs.select_related('created_by')
+        .prefetch_related('items__product')
+        .annotate(
+            refunded_total=Sum(
+                'refunds__total_amount',
+                filter=Q(refunds__is_voided=False),
+            )
+        )[offset:offset + page_size]
+    )
 
     return Response({
         'count': total,
@@ -386,8 +433,16 @@ def transaction_detail(request, transaction_id):
         return err
 
     try:
-        txn = Transaction.objects.prefetch_related('items__product').get(
-            id=transaction_id, business=business
+        txn = (
+            Transaction.objects.select_related('created_by')
+            .prefetch_related('items__product')
+            .annotate(
+                refunded_total=Sum(
+                    'refunds__total_amount',
+                    filter=Q(refunds__is_voided=False),
+                )
+            )
+            .get(id=transaction_id, business=business)
         )
     except Transaction.DoesNotExist:
         return Response(
@@ -525,6 +580,8 @@ def create_refund(request):
             TransactionItem.objects.create(
                 transaction=refund_txn,
                 product=original_item.product,
+                name=original_item.name,
+                is_reconciled=original_item.is_reconciled,
                 quantity=line['quantity'],
                 unit_price=original_item.unit_price,
                 cost_price=original_item.cost_price,
@@ -532,8 +589,11 @@ def create_refund(request):
                 original_item=original_item,
             )
 
+            # original_item.product is None for a refund against a
+            # not-in-catalog sale line — nothing was deducted at sale time,
+            # so there's no stock to restore here either.
             product = original_item.product
-            if product.track_stock:
+            if product and product.track_stock:
                 qty_before = product.current_stock
                 product.current_stock += line['quantity']
                 product.save(update_fields=['current_stock'])
@@ -598,7 +658,9 @@ def void_transaction(request, transaction_id):
         # Restore stock for SALE transactions
         if txn.type == Transaction.Type.SALE:
             for item in txn.items.all():
-                if item.product.track_stock:
+                # item.product is None for not-in-catalog items — nothing
+                # was deducted for those at sale time, so nothing to restore.
+                if item.product and item.product.track_stock:
                     qty_before = item.product.current_stock
                     item.product.current_stock += item.quantity
                     item.product.save(update_fields=['current_stock'])
@@ -622,6 +684,134 @@ def void_transaction(request, transaction_id):
     )
 
 
+# ── Reconciliation queue (Phase 9.2, minimal — pilot-path plan Phase 2) ────────
+# Closes the loop on Phase 9.1: a sale can include a not-in-catalog
+# ("custom") item — {name, unit_price} with no product_id — so a cashier
+# is never blocked from ringing up something that isn't set up yet. But
+# until now nothing ever turned that into real catalog/stock data, so
+# stock counts silently drifted for any business that used the feature.
+# These two endpoints are deliberately minimal: exact-name grouping, no
+# fuzzy matching, no taxonomy suggestions (that's Phase 9.5/Phase 4 of
+# the pilot-path plan) — just "don't let unreconciled sales be a dead end."
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsNotExpired, IsOwnerOrManager])
+def unreconciled_list(request):
+    """
+    GET /api/v1/transactions/unreconciled/
+    Every not-yet-resolved custom sale item, grouped by the freeform name
+    the cashier typed at sale time (case-insensitive) — five separate
+    sales of "Blue Band 500g" become one queue entry with item_count=5,
+    not five rows. Owner/manager only, same tier as stock-in/adjustment.
+    """
+    business, err = get_business_or_404(request)
+    if err:
+        return err
+
+    grouped = (
+        TransactionItem.objects
+        .filter(transaction__business=business, is_reconciled=False, product__isnull=True)
+        .annotate(name_key=Lower('name'))
+        .values('name_key')
+        .annotate(
+            display_name=Max('name'),  # arbitrary stable pick for casing shown to the owner
+            item_count=Count('id'),
+            total_quantity=Sum('quantity'),
+            total_value=Sum('subtotal'),
+            first_sold_at=Min('transaction__created_at'),
+            last_sold_at=Max('transaction__created_at'),
+        )
+        .order_by('-last_sold_at')
+    )
+
+    results = [
+        {
+            'name': row['display_name'],
+            'item_count': row['item_count'],
+            'total_quantity': row['total_quantity'],
+            'total_value': row['total_value'],
+            'first_sold_at': row['first_sold_at'],
+            'last_sold_at': row['last_sold_at'],
+        }
+        for row in grouped
+    ]
+    return Response(UnreconciledGroupSerializer(results, many=True).data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsNotExpired, IsOwnerOrManager])
+def unreconciled_resolve(request):
+    """
+    POST /api/v1/transactions/unreconciled/resolve/
+    Body: { name, product_id } — link every unreconciled item matching
+    `name` to an existing catalog product, or
+    { name, new_product: {...} } — create a new product from the queue
+    entry (validated the same way as adding a product by hand) and link
+    to that instead.
+
+    Deliberately does NOT touch current_stock. Those units were sold
+    before the product existed in the catalog — there's no "stock
+    before" to add back, unlike a void/refund. This purely links the
+    historical sale rows to a real product so reports and product
+    performance start counting them from here on; reports/views.py
+    already excludes items with product_id null, so no reporting change
+    was needed for this to work correctly.
+    """
+    business, err = get_business_or_404(request)
+    if err:
+        return err
+
+    serializer = ResolveUnreconciledSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+
+    items = TransactionItem.objects.filter(
+        transaction__business=business,
+        is_reconciled=False,
+        product__isnull=True,
+        name__iexact=data['name'],
+    )
+    if not items.exists():
+        return Response(
+            {'detail': MESSAGES['UNRECONCILED_GROUP_NOT_FOUND']},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if data.get('product_id'):
+        try:
+            product = Product.objects.get(id=data['product_id'], business=business, is_active=True)
+        except Product.DoesNotExist:
+            return Response(
+                {'detail': MESSAGES['PRODUCT_NOT_FOUND_WITH_ID'].format(product_id=data['product_id'])},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    else:
+        new_product_data = dict(data['new_product'])
+        new_product_data.setdefault('name', data['name'])
+        product_serializer = ProductCreateSerializer(data=new_product_data)
+        product_serializer.is_valid(raise_exception=True)
+        category = product_serializer.validated_data.get('category')
+        if category and category.business_id != business.id:
+            return Response(
+                {'detail': MESSAGES['CATEGORY_WRONG_BUSINESS']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        product = product_serializer.save(business=business, created_via=Product.CreationSource.RECONCILIATION)
+
+    with db_transaction.atomic():
+        resolved_count = items.update(product=product, is_reconciled=True)
+
+    notify_dashboard(business.id, 'reconcile')
+
+    from apps.reports.services import check_catalog_milestones
+    check_catalog_milestones(business)
+
+    return Response({
+        'product': ProductSerializer(product).data,
+        'resolved_count': resolved_count,
+    }, status=status.HTTP_200_OK)
+
+
 # ── Throttle scoping ──────────────────────────────────────────────────────
 # @api_view wraps these into a class accessible via `.cls` — this is the
 # standard DRF pattern for attaching a ScopedRateThrottle scope to a
@@ -630,5 +820,5 @@ def void_transaction(request, transaction_id):
 # on the endpoints that move money or stock — the ones worth protecting
 # even from a single legitimate but malfunctioning client (e.g. a retry
 # loop on a flaky connection hammering /transactions/sale/).
-for _view in (create_sale, create_stock_in, create_adjustment, create_refund, void_transaction):
+for _view in (create_sale, create_stock_in, create_adjustment, create_refund, void_transaction, unreconciled_resolve):
     _view.cls.throttle_scope = 'burst_write'

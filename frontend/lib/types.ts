@@ -24,6 +24,10 @@ export interface Business {
   name: string
   type: BusinessType
   custom_type_name: string | null
+  // Links to knowledge/business_types.json (Phase 8) — blank for
+  // pre-Phase-8 businesses and for the "Other / doesn't fit" fallback
+  // in setup, where there's deliberately no taxonomy match.
+  taxonomy_type_id: string
   mpesa_till_number: string | null
   mpesa_paybill_number: string | null
   mpesa_business_shortcode: string | null
@@ -77,9 +81,15 @@ export type PaymentStatus = 'PENDING' | 'CONFIRMED' | 'FAILED' | 'DISPUTED'
 
 export interface TransactionItem {
   id: number
-  product: string
+  product: string | null
   product_name: string
   product_sku: string
+  // Freeform name the cashier typed for an unreconciled (product=null) item.
+  // Blank for normal catalog-backed items — use product_name for display.
+  name: string
+  // False when product is null — a sale-without-inventory item awaiting
+  // reconciliation to a real catalog product.
+  is_reconciled: boolean
   quantity: string
   unit_price: string
   cost_price: string | null
@@ -106,11 +116,110 @@ export interface Transaction {
   items: TransactionItem[]
 }
 
+// ── Knowledge base / taxonomy (Phase 8) ────────────────────────────────────
+// Matches apps/knowledge/loader.py's public output shapes exactly —
+// these are read-only, version-controlled JSON resolved server-side,
+// never written to via the API.
+
+export interface BusinessTypeInfo {
+  id: string
+  name: string
+  kind: 'goods' | 'service' | 'mixed'
+  niches: string[]
+  sub_niche_capable: boolean
+  combinable_with: string[]
+}
+
+export interface TaxonomyUnit {
+  id: string
+  label: string
+  colloquial: string[]
+}
+
+export interface TaxonomyItem {
+  name: string
+  brands: string[]
+  units: TaxonomyUnit[]
+  stock_tracking: string
+}
+
+export interface TaxonomySubcategory {
+  subcategory_id: string
+  name: string
+  items: TaxonomyItem[]
+}
+
+export interface TaxonomyCategory {
+  category_id: string
+  name: string
+  // A category has either subcategories (which then hold items) or
+  // items directly — never both, per loader.py's get_taxonomy().
+  subcategories?: TaxonomySubcategory[]
+  items?: TaxonomyItem[]
+}
+
+export interface Taxonomy {
+  business_type_id: string
+  kind: string
+  categories: TaxonomyCategory[]
+  // salon_barbershop-style service templates only — the physical goods
+  // a service business also sells, kept separate from `categories` so
+  // the frontend can render it as its own "you might also sell" section.
+  retail_addon?: {
+    category_id: string
+    name: string
+    items: TaxonomyItem[]
+  }
+}
+
+export interface CategorySuggestions {
+  category_id: string
+  category_name: string
+  business_item_count: number
+  unlocked: boolean
+  suggested_names: string[]
+  suggested_brands: string[]
+}
+
+// ── Customer ledger (Phase 12) ─────────────────────────────────────────────
+// Matches apps/customers/serializers.py's CustomerSerializer /
+// CustomerPaymentSerializer, and the customer_detail view's extra
+// sales/payments fields on top of the base Customer shape.
+
+export interface Customer {
+  id: string
+  name: string
+  phone: string
+  notes: string
+  balance: string
+  oldest_unpaid_at: string | null
+  created_at: string
+  is_active: boolean
+}
+
+export interface CustomerPayment {
+  id: string
+  amount: string
+  notes: string
+  created_at: string
+}
+
+export interface CustomerDetail extends Customer {
+  sales: Transaction[]
+  payments: CustomerPayment[]
+}
+
 // ── Cart types (local state only) ──────────────────────────────────────────
 
 export interface CartItem {
   product: Product
   quantity: number
+  // True for a freeform "not in catalog" item (Phase 9, sell-without-
+  // inventory). `product` is a client-only synthetic Product shape built
+  // from the name/price the cashier typed — id is a locally-generated
+  // `custom-...` string, never a real backend Product id. See
+  // sell/page.tsx's addCustomToCart.
+  isCustom?: boolean
 }
 
 // ── M-Pesa types ────────────────────────────────────────────────────────────

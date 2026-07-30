@@ -1,0 +1,78 @@
+{
+  "business_type_id": "boutique",
+  "kind": "goods",
+  "_notes": [
+    "Boutique items are heavily variant-driven (size, color) in a way",
+    "hardware/kiosk items mostly aren't — flagging that the Product model's",
+    "variant handling (if any exists yet) matters more here than elsewhere.",
+    "Not resolving that now, just noting it for whoever builds the catalog",
+    "UI against this template."
+  ],
+  "categories": [
+    {
+      "category_id": "womenswear",
+      "items": [
+        { "name": "Dress", "brands": [], "units": ["piece"] },
+        { "name": "Blouse/top", "brands": [], "units": ["piece"] },
+        { "name": "Skirt", "brands": [], "units": ["piece"] },
+        { "name": "Trouser/jeans", "brands": [], "units": ["piece"] },
+        { "name": "Leggings", "brands": [], "units": ["piece"] },
+        { "name": "Khanga/kitenge", "brands": [], "units": ["piece"] }
+      ]
+    },
+    {
+      "category_id": "menswear",
+      "items": [
+        { "name": "Shirt", "brands": [], "units": ["piece"] },
+        { "name": "T-shirt", "brands": [], "units": ["piece"] },
+        { "name": "Trouser", "brands": [], "units": ["piece"] },
+        { "name": "Jeans", "brands": [], "units": ["piece"] },
+        { "name": "Suit", "brands": [], "units": ["piece", "set"] }
+      ]
+    },
+    {
+      "category_id": "childrenswear",
+      "items": [
+        { "name": "Kids dress", "brands": [], "units": ["piece"] },
+        { "name": "Kids shirt/t-shirt", "brands": [], "units": ["piece"] },
+        { "name": "Kids trouser", "brands": [], "units": ["piece"] },
+        { "name": "School uniform items", "brands": [], "units": ["piece"], "notes": "may deserve its own category if boutiques commonly specialize in this — flagging for review" }
+      ]
+    },
+    {
+      "category_id": "footwear",
+      "items": [
+        { "name": "Ladies shoes/heels", "brands": ["NEEDS_REVIEW"], "units": ["pair"] },
+        { "name": "Men's shoes", "brands": ["NEEDS_REVIEW"], "units": ["pair"] },
+        { "name": "Sandals/slippers", "brands": ["NEEDS_REVIEW"], "units": ["pair"] },
+        { "name": "Sneakers", "brands": ["NEEDS_REVIEW"], "units": ["pair"] }
+      ]
+    },
+    {
+      "category_id": "bags_accessories",
+      "items": [
+        { "name": "Handbag", "brands": [], "units": ["piece"] },
+        { "name": "Belt", "brands": [], "units": ["piece"] },
+        { "name": "Scarf/shawl", "brands": [], "units": ["piece"] },
+        { "name": "Sunglasses", "brands": [], "units": ["piece"] }
+      ]
+    },
+    {
+      "category_id": "jewelry_watches",
+      "items": [
+        { "name": "Earrings", "brands": [], "units": ["pair", "piece"] },
+        { "name": "Necklace", "brands": [], "units": ["piece"] },
+        { "name": "Bracelet", "brands": [], "units": ["piece"] },
+        { "name": "Watch", "brands": ["NEEDS_REVIEW"], "units": ["piece"] }
+      ]
+    },
+    {
+      "category_id": "toiletries_personal_care",
+      "shared_reference": true,
+      "items": [
+        { "name": "Perfume/body spray", "brands": ["NEEDS_REVIEW"], "units": ["piece"] },
+        { "name": "Lotion", "brands": ["NEEDS_REVIEW"], "units": ["piece"] }
+      ]
+    }
+  ]
+}

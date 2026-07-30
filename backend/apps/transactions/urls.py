@@ -8,6 +8,8 @@ urlpatterns = [
     path('adjustment/', views.create_adjustment, name='transaction-adjustment'),
     path('loss/', views.create_adjustment, name='transaction-loss'),
     path('refund/', views.create_refund, name='transaction-refund'),
+    path('unreconciled/', views.unreconciled_list, name='transaction-unreconciled-list'),
+    path('unreconciled/resolve/', views.unreconciled_resolve, name='transaction-unreconciled-resolve'),
     path('<uuid:transaction_id>/', views.transaction_detail, name='transaction-detail'),
     path('<uuid:transaction_id>/void/', views.void_transaction, name='transaction-void'),
 ]

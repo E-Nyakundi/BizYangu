@@ -106,6 +106,41 @@ export interface LossReport extends LossSummary {
   end: string
 }
 
+// ── Phase 7: growth & profit graphs ─────────────────────────────────────────
+
+export interface MarginTrendPoint {
+  date: string
+  revenue: string
+  cost: string
+  margin: string
+  margin_pct: number | null
+}
+
+export interface PeriodTotals {
+  net_revenue: string
+  transaction_count: number
+}
+
+export interface PreviousPeriodTotals extends PeriodTotals {
+  start: string
+  end: string
+}
+
+export type BusinessMode = 'goods' | 'service'
+
+export interface GrowthReport {
+  start: string
+  end: string
+  daily_breakdown: { date: string; revenue: string; transaction_count: number }[]
+  margin_trend: MarginTrendPoint[]
+  has_margin_data: boolean
+  business_mode: BusinessMode
+  current_period: PeriodTotals
+  previous_period: PreviousPeriodTotals
+  revenue_growth_pct: number | null
+  transaction_growth_pct: number | null
+}
+
 export interface EodSummary extends MoneySummary {
   date: string
   top_products: TopProduct[]
@@ -115,6 +150,54 @@ export interface EodSummary extends MoneySummary {
 
 export async function getDashboard(): Promise<DashboardReport> {
   const { data } = await api.get('/reports/dashboard/')
+  return data
+}
+
+// ── Data Health (Phase 13) ──────────────────────────────────────────────────
+
+export interface DataHealthDimension {
+  key: string
+  label: string
+  percentage: number | null
+}
+
+export interface DataHealthWorstDimension extends DataHealthDimension {
+  reason: string
+  // Present when this dimension won via the absolute-count override
+  // (a large raw backlog beating a percentage that looks fine) rather
+  // than the percentage-based pick — see apps/reports/views.py's
+  // _pick_worst_dimension. Null when the percentage pick was used.
+  action_count: number | null
+}
+
+export interface DataHealth {
+  score: number | null
+  dimensions: DataHealthDimension[]
+  worst_dimension: DataHealthWorstDimension | null
+}
+
+export async function getDataHealth(): Promise<DataHealth> {
+  const { data } = await api.get('/reports/data-health/')
+  return data
+}
+
+// ── Milestones (Phase 5) ────────────────────────────────────────────────────
+// Celebratory events — computed and stored by the backend at the moment
+// they're actually achieved (sale creation, reconciliation resolve,
+// cost-price writes), not lazily here. This is a read-only view of what's
+// already been recorded. "Is this new enough to celebrate right now" is a
+// frontend concern — the backend doesn't track seen/dismissed state.
+
+export interface Milestone {
+  id: string
+  milestone_type: 'highest_day_sales' | 'fully_reconciled_week' | 'confidence_to_act'
+  value: string | null
+  achieved_at: string
+  message: string
+}
+
+export async function getMilestones(): Promise<Milestone[]> {
+  const { data } = await api.get('/reports/milestones/')
   return data
 }
 
@@ -130,6 +213,11 @@ export async function getPeriodReport(start?: string, end?: string): Promise<Per
 
 export async function getProductPerformance(start?: string, end?: string): Promise<ProductPerformanceReport> {
   const { data } = await api.get('/reports/products/', { params: { start, end } })
+  return data
+}
+
+export async function getGrowthReport(start?: string, end?: string): Promise<GrowthReport> {
+  const { data } = await api.get('/reports/growth/', { params: { start, end } })
   return data
 }
 

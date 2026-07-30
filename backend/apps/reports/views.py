@@ -18,9 +18,10 @@ from apps.accounts.permissions import IsNotExpired, IsOwnerOrManager
 from apps.catalog.models import Product
 from apps.core.messages import MESSAGES
 from apps.inventory.models import StockMovement
-from apps.transactions.models import Transaction
+from apps.transactions.models import Transaction, TransactionItem
 
-from .serializers import DateQuerySerializer, PeriodQuerySerializer
+from .models import BusinessMilestone
+from .serializers import BusinessMilestoneSerializer, DateQuerySerializer, PeriodQuerySerializer
 
 
 def get_business_or_404(request):
@@ -115,6 +116,70 @@ def _top_products(business, date_from, date_to, limit=5):
     ]
 
 
+def _daily_margin_trend(business, date_from, date_to):
+    """
+    Per-day revenue/cost/margin, built from TransactionItem rows rather than
+    Transaction totals (unlike _money_summary's daily_breakdown) because
+    margin is only computable at the line-item level where cost_price was
+    snapshotted at sale time. Items with no cost_price recorded are excluded
+    from the cost/margin sums (same "don't guess" rule as
+    product_performance_report) but nothing here fabricates a cost.
+    """
+    TWO_PLACES = Decimal('0.01')
+
+    rows = (
+        TransactionItem.objects.filter(
+            transaction__business=business,
+            transaction__type=Transaction.Type.SALE,
+            transaction__is_voided=False,
+            transaction__created_at__date__gte=date_from,
+            transaction__created_at__date__lte=date_to,
+            cost_price__isnull=False,
+        )
+        .annotate(day=TruncDate('transaction__created_at'))
+        .values('day')
+        .annotate(
+            revenue=Sum('subtotal'),
+            cost=Sum(F('cost_price') * F('quantity')),
+        )
+        .order_by('day')
+    )
+
+    trend = []
+    for row in rows:
+        revenue = (row['revenue'] or Decimal('0.00')).quantize(TWO_PLACES)
+        cost = (row['cost'] or Decimal('0.00')).quantize(TWO_PLACES)
+        margin = (revenue - cost).quantize(TWO_PLACES)
+        margin_pct = float(margin / revenue * 100) if revenue > 0 else None
+        trend.append({
+            'date': str(row['day']),
+            'revenue': str(revenue),
+            'cost': str(cost),
+            'margin': str(margin),
+            'margin_pct': margin_pct,
+        })
+    return trend
+
+
+def _previous_period(start, end):
+    """Returns (prev_start, prev_end) — the immediately preceding window of
+    the same length as (start, end), inclusive on both sides. Used for the
+    period-over-period growth indicator: 'this month vs last month' when
+    start/end happen to bound a calendar month, but works for any range."""
+    length_days = (end - start).days + 1
+    prev_end = start - timezone.timedelta(days=1)
+    prev_start = prev_end - timezone.timedelta(days=length_days - 1)
+    return prev_start, prev_end
+
+
+def _pct_change(current, previous):
+    """None when there's nothing to compare against (previous == 0) —
+    frontend hides the badge rather than showing a misleading ∞ or 0%."""
+    if previous > 0:
+        return float((current - previous) / previous * 100)
+    return None
+
+
 def _low_stock_summary(business, limit=5):
     products = Product.objects.filter(business=business, is_active=True, track_stock=True)
     low = products.filter(current_stock__gt=0, current_stock__lte=F('low_stock_threshold'))
@@ -147,7 +212,11 @@ def _loss_summary(business, date_from, date_to):
         business=business,
         movement_type__in=[StockMovement.MovementType.LOSS, StockMovement.MovementType.DAMAGE],
         created_at__date__gte=date_from, created_at__date__lte=date_to,
-    ).select_related('product')
+    ).select_related('product', 'created_by')
+    # select_related('created_by') matters here even though this function
+    # doesn't touch it directly — _loss_by_employee() below iterates this
+    # same cached queryset and reads m.created_by.name per row. Without it,
+    # that's one extra query per loss/damage movement in the period.
 
     by_product = {}
     total_qty = Decimal('0.00')
@@ -339,6 +408,96 @@ def period_report(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsNotExpired, IsOwnerOrManager])
+def growth_report(request):
+    """
+    GET /api/v1/reports/growth/?start=&end= (defaults to last 30 days)
+    Phase 7 — Reports: growth & profit graphs. Turns the existing
+    aggregation into visual trend data:
+      - daily_breakdown: revenue-over-time (reuses the same shape as
+        /reports/period/, so the frontend's existing chart component works
+        unchanged if reused)
+      - margin_trend: profit/margin per day, computed at the line-item
+        level (see _daily_margin_trend) since Transaction totals alone
+        can't carry per-day cost
+      - has_margin_data: false when no line item in the window has a
+        cost_price set — the frontend should not render margin language
+        in that case (e.g. a service business that never set cost prices)
+      - business_mode: 'goods' | 'service' — a business counts as 'goods'
+        if it has any stock-tracked product OR any margin data in the
+        window; otherwise 'service'. Used by the frontend to skip
+        stock/margin framing entirely for service-type businesses per the
+        build plan's Phase 7 requirement (2.1/2.2) — note there's no
+        explicit has_inventory flag on Business yet (that lands in Phase
+        9), so this is inferred rather than a stored flag.
+      - current_period / previous_period / revenue_growth_pct /
+        transaction_growth_pct: period-over-period comparison against the
+        immediately preceding window of the same length
+    """
+    business, err = get_business_or_404(request)
+    if err:
+        return err
+
+    q = PeriodQuerySerializer(data=request.query_params)
+    q.is_valid(raise_exception=True)
+    start, end = q.validated_data['start'], q.validated_data['end']
+
+    daily_rows = (
+        _sales_qs(business, start, end)
+        .annotate(day=TruncDate('created_at'))
+        .values('day')
+        .annotate(revenue=Sum('total_amount'), count=Count('id'))
+        .order_by('day')
+    )
+    daily_breakdown = [
+        {
+            'date': str(row['day']),
+            'revenue': str((row['revenue'] or Decimal('0.00')).quantize(Decimal('0.01'))),
+            'transaction_count': row['count'],
+        }
+        for row in daily_rows
+    ]
+
+    margin_trend = _daily_margin_trend(business, start, end)
+    has_margin_data = len(margin_trend) > 0
+    has_tracked_products = Product.objects.filter(business=business, track_stock=True).exists()
+    business_mode = 'goods' if (has_margin_data or has_tracked_products) else 'service'
+
+    current_summary = _money_summary(business, start, end)
+    prev_start, prev_end = _previous_period(start, end)
+    previous_summary = _money_summary(business, prev_start, prev_end)
+
+    current_net = Decimal(current_summary['net_revenue'])
+    previous_net = Decimal(previous_summary['net_revenue'])
+    revenue_growth_pct = _pct_change(current_net, previous_net)
+    transaction_growth_pct = _pct_change(
+        Decimal(current_summary['transaction_count']),
+        Decimal(previous_summary['transaction_count']),
+    )
+
+    return Response({
+        'start': str(start),
+        'end': str(end),
+        'daily_breakdown': daily_breakdown,
+        'margin_trend': margin_trend,
+        'has_margin_data': has_margin_data,
+        'business_mode': business_mode,
+        'current_period': {
+            'net_revenue': current_summary['net_revenue'],
+            'transaction_count': current_summary['transaction_count'],
+        },
+        'previous_period': {
+            'start': str(prev_start),
+            'end': str(prev_end),
+            'net_revenue': previous_summary['net_revenue'],
+            'transaction_count': previous_summary['transaction_count'],
+        },
+        'revenue_growth_pct': revenue_growth_pct,
+        'transaction_growth_pct': transaction_growth_pct,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsNotExpired, IsOwnerOrManager])
 def product_performance_report(request):
     """
     GET /api/v1/reports/products/?start=&end= (defaults to last 30 days)
@@ -454,3 +613,248 @@ def eod_summary(request):
         'stock_alert': stock,
         'whatsapp_text': text,
     })
+
+
+# ── Data Health (Phase 13) ──────────────────────────────────────────────────
+# One visible number reflecting how complete/trustworthy a business's own
+# data is, built entirely from signals that already exist elsewhere in the
+# app — this is a summarizing layer, not a new source of information (see
+# the design constraints pinned in the pilot-path build plan). Computed on
+# read, matching the no-Report-model convention every other report here
+# already follows, and the Phase 12 customer-balance pattern.
+
+def _data_health_dimensions(business):
+    """
+    Returns a list of {key, label, percentage} dicts. `percentage` is
+    None when a dimension genuinely doesn't apply yet — e.g. cost-price
+    coverage for a business with zero products isn't "bad data," it's
+    "no data yet," and averaging it in as 0 would be actively misleading.
+    Dimensions with percentage=None are excluded from the overall score,
+    not counted against it.
+    """
+    products = Product.objects.filter(business=business, is_active=True)
+    product_count = products.count()
+
+    dimensions = []
+
+    if product_count:
+        with_cost = products.exclude(cost_price__isnull=True).count()
+        dimensions.append({
+            'key': 'cost_price',
+            'label': 'Cost price coverage',
+            'percentage': round(with_cost / product_count * 100, 1),
+            '_missing_count': product_count - with_cost,
+        })
+    else:
+        dimensions.append({'key': 'cost_price', 'label': 'Cost price coverage', 'percentage': None})
+
+    if product_count:
+        via_taxonomy = products.filter(created_via=Product.CreationSource.TAXONOMY).count()
+        dimensions.append({
+            'key': 'taxonomy_depth',
+            'label': 'Catalog detail (brand-level entries)',
+            'percentage': round(via_taxonomy / product_count * 100, 1),
+        })
+    else:
+        dimensions.append({'key': 'taxonomy_depth', 'label': 'Catalog detail (brand-level entries)', 'percentage': None})
+
+    # Reconciliation cleanliness: among freeform (product IS NULL) sale
+    # items ever recorded, what % have been resolved. Deliberately scoped
+    # to freeform items only, not all transaction items — a normal
+    # catalog sale is already is_reconciled=True by default, so including
+    # it would dilute this toward 100% regardless of whether the
+    # reconciliation queue is actually being kept clean.
+    #
+    # Gated on has_any_sale, not just freeform_count==0: a business that
+    # has never made a single sale would otherwise show a vacuous 100%
+    # here (zero freeform items, so "100% of zero are reconciled" is
+    # technically true but means nothing) — that's not a genuine signal,
+    # it's an artifact of having nothing to measure yet, and it would
+    # incorrectly give a brand-new empty business a real-looking score
+    # when every other dimension is correctly None. A business that HAS
+    # sold things but never used a freeform item gets a genuine, earned
+    # 100% instead.
+    has_any_sale = Transaction.objects.filter(business=business, type=Transaction.Type.SALE).exists()
+    freeform_items = TransactionItem.objects.filter(transaction__business=business, product__isnull=True)
+    freeform_count = freeform_items.count()
+    if not has_any_sale:
+        reconciliation_pct = None
+        reconciled_count = 0
+    elif freeform_count:
+        reconciled_count = freeform_items.filter(is_reconciled=True).count()
+        reconciliation_pct = round(reconciled_count / freeform_count * 100, 1)
+    else:
+        reconciled_count = 0
+        reconciliation_pct = 100.0
+    dimensions.append({
+        'key': 'reconciliation',
+        'label': 'Reconciliation cleanliness',
+        'percentage': reconciliation_pct,
+        '_freeform_count': freeform_count,
+        '_reconciled_count': reconciled_count,
+    })
+
+    # Barcode confirmation — deferred until barcode scanning ships (see
+    # Phase 5 build plan). Placeholder now so the response shape is
+    # stable; adding real data later is a one-line change here, not a
+    # response-shape change downstream.
+    dimensions.append({
+        'key': 'barcode_confirmation',
+        'label': 'Barcode-confirmed products',
+        'percentage': None,
+    })
+
+    return dimensions
+
+
+def _data_health_score(dimensions):
+    """Equal-weighted average of every dimension with a real percentage.
+    Returns None (not 0) if nothing is scored yet — a brand-new business
+    with an empty catalog has no meaningful score, not a bad one."""
+    scored = [d['percentage'] for d in dimensions if d['percentage'] is not None]
+    if not scored:
+        return None
+    return round(sum(scored) / len(scored), 1)
+
+
+def _data_health_reason(dimension):
+    """Plain-language reason for the worst-scoring dimension — see
+    Phase B's triage design: always name the single highest-leverage
+    fix, never a pile of alerts at once."""
+    key = dimension['key']
+    if key == 'cost_price':
+        return MESSAGES['DATA_HEALTH_REASON_COST_PRICE'].format(count=dimension['_missing_count'])
+    if key == 'taxonomy_depth':
+        return MESSAGES['DATA_HEALTH_REASON_TAXONOMY_DEPTH'].format(percentage=dimension['percentage'])
+    if key == 'reconciliation':
+        unresolved = dimension['_freeform_count'] - dimension['_reconciled_count']
+        return MESSAGES['DATA_HEALTH_REASON_RECONCILIATION'].format(count=unresolved)
+    return ''
+
+
+# Absolute-count thresholds for the two "cheap-win" alerts (reconciliation
+# backlog, cost-price gap). These exist alongside the percentage-based
+# worst-dimension pick above because percentage alone can hide a real
+# backlog: 15% of a 300-product catalog missing a cost price is 45
+# products — a genuinely actionable pile, even if 85% coverage looks
+# fine on the score. When a dimension crosses its raw-count threshold it
+# takes priority over the percentage pick; between two dimensions that
+# both cross threshold, the larger raw count wins — still exactly one
+# nudge surfaced, never a list.
+RECONCILIATION_BACKLOG_ALERT_THRESHOLD = 5
+COST_PRICE_GAP_ALERT_THRESHOLD = 10
+
+
+def _raw_action_count(dimension):
+    """Raw actionable count for dimensions that have one — used for the
+    count-based alert override, independent of the dimension's
+    percentage."""
+    if dimension['key'] == 'cost_price':
+        return dimension.get('_missing_count')
+    if dimension['key'] == 'reconciliation':
+        return dimension['_freeform_count'] - dimension['_reconciled_count']
+    return None
+
+
+def _pick_worst_dimension(dimensions):
+    """
+    Single-nudge selection: an absolute-count alert (reconciliation
+    backlog, cost-price gap) wins over the percentage-based pick whenever
+    one crosses its threshold, since a large raw backlog is actionable
+    regardless of how it looks as a ratio. Falls back to the
+    lowest-percentage dimension below 100% otherwise. Returns None when
+    there's genuinely nothing worth surfacing.
+    """
+    scored_dims = [d for d in dimensions if d['percentage'] is not None]
+
+    threshold_by_key = {
+        'reconciliation': RECONCILIATION_BACKLOG_ALERT_THRESHOLD,
+        'cost_price': COST_PRICE_GAP_ALERT_THRESHOLD,
+    }
+    over_threshold = []
+    for d in scored_dims:
+        count = _raw_action_count(d)
+        threshold = threshold_by_key.get(d['key'])
+        if count is not None and threshold is not None and count >= threshold:
+            over_threshold.append((count, d))
+    if over_threshold:
+        over_threshold.sort(key=lambda pair: pair[0], reverse=True)
+        return over_threshold[0][1]
+
+    below_max = [d for d in scored_dims if d['percentage'] < 100]
+    return min(below_max, key=lambda d: d['percentage']) if below_max else None
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsNotExpired, IsOwnerOrManager])
+def data_health(request):
+    """
+    GET /api/v1/reports/data-health/
+    One score (0-100, or null if there's not enough data yet to mean
+    anything) plus a per-dimension breakdown and the single worst
+    dimension to fix next — never a pile of simultaneous alerts.
+    """
+    business, err = get_business_or_404(request)
+    if err:
+        return err
+
+    dimensions = _data_health_dimensions(business)
+    score = _data_health_score(dimensions)
+
+    # Only surface a nudge when there's genuinely something to fix — a
+    # dimension sitting at 100% has nothing left to improve, and a
+    # "worst dimension" reason that reads "0 products are missing a cost
+    # price" is noise, not a nudge. Matches the "never show an alert with
+    # nothing behind it" intent, not just "always name the lowest number."
+    # An absolute-count backlog (reconciliation queue, cost-price gap)
+    # can also take priority here — see _pick_worst_dimension.
+    worst = _pick_worst_dimension(dimensions)
+    worst_out = None
+    if worst:
+        worst_out = {
+            'key': worst['key'],
+            'label': worst['label'],
+            'percentage': worst['percentage'],
+            'reason': _data_health_reason(worst),
+            'action_count': _raw_action_count(worst),
+        }
+
+    # Strip internal bookkeeping fields (prefixed `_`) before returning —
+    # they exist only to compute reasons above, not for the API response.
+    clean_dimensions = [
+        {k: v for k, v in d.items() if not k.startswith('_')}
+        for d in dimensions
+    ]
+
+    return Response({
+        'score': score,
+        'dimensions': clean_dimensions,
+        'worst_dimension': worst_out,
+    })
+
+
+# ── Milestones (Phase 5) ─────────────────────────────────────────────────────
+# Celebratory events, computed and stored lazily by apps.reports.services at
+# the call sites where they can actually fire (sale creation, reconciliation
+# resolve, cost-price writes) — this endpoint is read-only, just returns
+# what's already been recorded. Most-recent-first, capped at a handful since
+# the frontend only ever needs to know about recent ones to decide whether
+# to show a toast (dismissal/seen-state is a frontend concern, not tracked
+# here — see Phase 5 build plan).
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsNotExpired, IsOwnerOrManager])
+def milestones(request):
+    """
+    GET /api/v1/reports/milestones/
+    The business's most recent milestones (highest single-day sales,
+    first fully-reconciled week, cost-price coverage crossing 80%),
+    newest first.
+    """
+    business, err = get_business_or_404(request)
+    if err:
+        return err
+
+    LIMIT = 10
+    qs = BusinessMilestone.objects.filter(business=business).order_by('-achieved_at')[:LIMIT]
+    return Response(BusinessMilestoneSerializer(qs, many=True).data)

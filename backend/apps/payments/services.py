@@ -219,6 +219,74 @@ def process_stk_callback(payload: dict) -> None:
 MATCH_WINDOW_MINUTES = 5
 
 
+def void_stale_pending_stk_requests(timeout_minutes: int = None) -> int:
+    """
+    Closes out any STK Push still sitting PENDING after `timeout_minutes`
+    with no Daraja callback ever received (dropped tunnel, customer
+    ignored the prompt, network hiccup) — marks the STK request TIMEOUT
+    and voids the underlying sale, restoring stock, via the same helper
+    the FAILED-callback path already uses (`_void_transaction_for_failed_
+    payment`). Never double-voids: if a late callback resolved the
+    transaction some other way between the query and now, this only
+    closes out the STK request record.
+
+    Meant to run periodically — see apps.payments.tasks and
+    CELERY_BEAT_SCHEDULE in settings/base.py. Safe to call repeatedly;
+    idempotent by construction since it only ever touches rows still
+    PENDING past the cutoff.
+    """
+    from django.conf import settings as django_settings
+
+    minutes = timeout_minutes if timeout_minutes is not None else getattr(
+        django_settings, 'STK_TIMEOUT_MINUTES', 10
+    )
+    cutoff = timezone.now() - timedelta(minutes=minutes)
+
+    stale = MPesaSTKRequest.objects.select_related('transaction', 'business').filter(
+        status=MPesaSTKRequest.Status.PENDING,
+        created_at__lte=cutoff,
+    )
+
+    voided_count = 0
+    for stk_request in stale:
+        transaction = stk_request.transaction
+
+        if transaction.is_voided or transaction.payment_status != Transaction.PaymentStatus.PENDING:
+            # Already resolved some other way (e.g. a late callback that
+            # slipped in between the query and now) — just close out the
+            # STK request record, don't touch the transaction again.
+            stk_request.status = MPesaSTKRequest.Status.TIMEOUT
+            stk_request.completed_at = timezone.now()
+            stk_request.save(update_fields=['status', 'completed_at'])
+            continue
+
+        stk_request.status = MPesaSTKRequest.Status.TIMEOUT
+        stk_request.result_desc = f'No callback received within {minutes} minutes'
+        stk_request.completed_at = timezone.now()
+        stk_request.save(update_fields=['status', 'result_desc', 'completed_at'])
+
+        _void_transaction_for_failed_payment(
+            transaction,
+            reason=f'M-Pesa STK Push haikujibiwa ndani ya dakika {minutes} (muda umeisha)',
+        )
+        voided_count += 1
+
+        _broadcast(stk_request.business_id, {
+            'type': 'stk_result',
+            'checkout_request_id': stk_request.checkout_request_id,
+            'transaction_id': str(transaction.id),
+            'status': 'TIMEOUT',
+            'mpesa_receipt': None,
+            'result_desc': stk_request.result_desc,
+        })
+        logger.info(
+            'Auto-voided stale PENDING M-Pesa sale %s after %s minutes (STK timeout)',
+            transaction.reference_number, minutes,
+        )
+
+    return voided_count
+
+
 def _try_auto_match(mpesa_txn: MPesaTransaction) -> bool:
     """
     Looks for an open (PENDING, not voided) SALE transaction on the

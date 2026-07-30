@@ -1,0 +1,35 @@
+{
+  "_notes": [
+    "Shared unit vocabulary referenced by all templates.",
+    "'colloquial' lists local naming variants worth accepting as synonyms",
+    "in product entry (e.g. so 'debe' and '20L tin' resolve to the same unit).",
+    "This list is a draft — colloquial terms especially need native review."
+  ],
+  "units": [
+    { "id": "piece", "label": "Piece", "colloquial": ["pc", "kipande"] },
+    { "id": "kg", "label": "Kilogram", "colloquial": ["kilo"] },
+    { "id": "g", "label": "Gram", "colloquial": [] },
+    { "id": "litre", "label": "Litre", "colloquial": ["ltr", "L"] },
+    { "id": "ml", "label": "Millilitre", "colloquial": [] },
+    { "id": "bottle", "label": "Bottle", "colloquial": ["chupa"] },
+    { "id": "crate", "label": "Crate", "colloquial": [] },
+    { "id": "can", "label": "Can", "colloquial": ["tin (beverage)"] },
+    { "id": "packet", "label": "Packet", "colloquial": ["pkt"] },
+    { "id": "bag", "label": "Bag", "colloquial": ["mfuko"] },
+    { "id": "bale", "label": "Bale", "colloquial": [] },
+    { "id": "sack_50kg", "label": "50kg sack/bag", "colloquial": ["gunia"] },
+    { "id": "tonne", "label": "Tonne", "colloquial": ["ton"] },
+    { "id": "debe_20l", "label": "Debe (20L tin)", "colloquial": ["debe", "tin"] },
+    { "id": "gorogoro", "label": "Gorogoro (~2kg tin measure)", "colloquial": ["goro"] },
+    { "id": "dozen", "label": "Dozen", "colloquial": ["dazani"] },
+    { "id": "roll", "label": "Roll", "colloquial": [] },
+    { "id": "metre", "label": "Metre (length)", "colloquial": ["m"] },
+    { "id": "foot", "label": "Foot (length)", "colloquial": ["ft"] },
+    { "id": "pair", "label": "Pair", "colloquial": [] },
+    { "id": "set", "label": "Set", "colloquial": [] },
+    { "id": "bucket", "label": "Bucket (paint)", "colloquial": [] },
+    { "id": "gauge", "label": "Gauge (roofing sheet thickness)", "colloquial": [] },
+    { "id": "service", "label": "Per service (no unit — service businesses)", "colloquial": [] },
+    { "id": "session", "label": "Per session (service businesses)", "colloquial": [] }
+  ]
+}
