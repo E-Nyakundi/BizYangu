@@ -18,6 +18,10 @@ COPY . .
 # (or whatever your prod module is called) as a build-time env var for this
 # to read the right STATIC_ROOT/STORAGES config.
 ENV DJANGO_SETTINGS_MODULE=bizyangu.settings.production
+ENV SECRET_KEY=build-time-placeholder-overridden-at-runtime
+ENV DB_PASSWORD=build-time-placeholder-overridden-at-runtime
+ENV ALLOWED_HOSTS=build-time-placeholder-overridden-at-runtime
+ENV CORS_ALLOWED_ORIGINS=build-time-placeholder-overridden-at-runtime
 RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
