@@ -13,6 +13,7 @@ import Link from 'next/link'
 import { useAuthStore } from '@/lib/auth'
 import { registerPushNotifications } from '@/lib/push'
 import { COPY } from '@/lib/copy'
+import Logo from '@/components/Logo'
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: COPY.NAV_HOME, icon: '⊞', roles: null },
@@ -104,6 +105,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         {/* Logo */}
         <div style={{ padding: '0 var(--sp-4) var(--sp-5)' }}>
+          <div style={{ marginBottom: 'var(--sp-2)' }}>
+            <Logo height={20} />
+          </div>
           <span style={{ fontWeight: 700, fontSize: 'var(--fs-md)', letterSpacing: '-0.02em' }}>
             Biz<span style={{ color: 'var(--color-teal)' }}>Yangu</span>
           </span>

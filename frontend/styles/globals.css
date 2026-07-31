@@ -80,6 +80,17 @@
 }
 
 /* ────────────────────────────────────────────
+   LOGO — theme-aware mark swap (see components/Logo.tsx)
+   Default (dark theme, [data-theme] unset or "dark"): show the light mark.
+   Light theme: show the dark mark instead.
+   ──────────────────────────────────────────── */
+.logo-mark--light-theme { display: none; }
+.logo-mark--dark-theme { display: block; }
+
+[data-theme="light"] .logo-mark--light-theme { display: block; }
+[data-theme="light"] .logo-mark--dark-theme { display: none; }
+
+/* ────────────────────────────────────────────
    RESET & BASE
    ──────────────────────────────────────────── */
 

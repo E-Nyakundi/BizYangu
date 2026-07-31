@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 import { COPY } from '@/lib/copy'
+import Logo from '@/components/Logo'
 
 export default function HomePage() {
   const [apiStatus, setApiStatus] = useState<'checking' | 'ok' | 'error'>('checking')
@@ -33,6 +34,9 @@ export default function HomePage() {
     >
       {/* Logo / wordmark */}
       <div style={{ textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--sp-2)' }}>
+          <Logo height={22} />
+        </div>
         <div
           className="mono"
           style={{
@@ -42,7 +46,7 @@ export default function HomePage() {
             marginBottom: 'var(--sp-2)',
           }}
         >
-          [LN] SYSTEMS
+          BIASHARA SYSTEMS
         </div>
         <h1
           style={{

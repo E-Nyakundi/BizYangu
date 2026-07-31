@@ -4,6 +4,7 @@ import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { requestOtp, verifyOtp, useAuthStore, apiErrorMessage } from '@/lib/auth'
 import Deepfield from '@/components/deepfield'
+import Logo from '@/components/Logo'
 import { COPY } from '@/lib/copy'
 
 type Step = 'phone' | 'otp'
@@ -84,6 +85,9 @@ export default function LoginPage() {
       <Deepfield position="fixed" zIndex={-1} opacity={0.4} />
       <div className="card" style={{ width: '100%', maxWidth: 380 }}>
         <div style={{ marginBottom: 'var(--sp-6)', textAlign: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 'var(--sp-3)' }}>
+            <Logo height={40} />
+          </div>
           <h1 style={{ fontSize: 'var(--fs-xl)', color: 'var(--color-teal)' }}>BizYangu</h1>
           <p style={{ color: 'var(--color-muted)', marginTop: 'var(--sp-2)' }}>{COPY.LOGIN_TAGLINE}</p>
         </div>
