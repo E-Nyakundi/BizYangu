@@ -7,7 +7,7 @@
  * "Payments" and "Creditors" nav items visible to OWNER and MANAGER only.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/auth'
@@ -64,15 +64,34 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!isInitialized) hydrate()
   }, [deviceLocked, isInitialized, hydrate])
 
+  // isInitialized can already be true by the time this layout mounts —
+  // e.g. /setup now hydrates right after creating the business, and PIN
+  // setup merges into the existing user object rather than refetching.
+  // Both are supposed to carry a correct business_id forward, but if
+  // either one is ever wrong, isInitialized being true means the effect
+  // above never re-hydrates, so this guard would otherwise trust stale
+  // in-memory state forever. Before actually bouncing someone back to
+  // "register a business," reconfirm with the backend once — real
+  // businessless accounts still land on /setup, but a stale cache no
+  // longer can.
+  const recheckedRef = useRef(false)
+
   useEffect(() => {
     if (deviceLocked === null || deviceLocked) return
     if (!isInitialized || isLoading) return
     if (!user) {
       router.replace('/login')
-    } else if (!user.business_id) {
+      return
+    }
+    if (!user.business_id) {
+      if (!recheckedRef.current) {
+        recheckedRef.current = true
+        hydrate()
+        return
+      }
       router.replace('/setup')
     }
-  }, [deviceLocked, isInitialized, isLoading, user, router])
+  }, [deviceLocked, isInitialized, isLoading, user, router, hydrate])
 
   useEffect(() => {
   // Gated behind NEXT_PUBLIC_PUSH_ENABLED — calling PushNotifications.register()
