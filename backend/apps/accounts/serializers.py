@@ -46,6 +46,20 @@ class OTPVerifySerializer(serializers.Serializer):
         return value
 
 
+class PinSetSerializer(serializers.Serializer):
+    pin = serializers.RegexField(
+        regex=r'^\d{4,6}$',
+        error_messages={'invalid': MESSAGES['PIN_INVALID_FORMAT']},
+    )
+
+
+class PinVerifySerializer(serializers.Serializer):
+    pin = serializers.RegexField(
+        regex=r'^\d{4,6}$',
+        error_messages={'invalid': MESSAGES['PIN_INVALID_FORMAT']},
+    )
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     business_id = serializers.UUIDField(source='business.id', read_only=True)
     business_name = serializers.CharField(source='business.name', read_only=True)
@@ -56,6 +70,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
     demo_expires_at = serializers.DateTimeField(
         source='business.demo_expires_at', read_only=True
     )
+    has_pin = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = User
@@ -63,7 +78,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'id', 'phone_number', 'name', 'role',
             'business_id', 'business_name',
             'subscription_status', 'days_remaining', 'demo_expires_at',
-            'date_joined',
+            'date_joined', 'has_pin',
         ]
         read_only_fields = fields
 

@@ -33,6 +33,14 @@ MESSAGES = {
     'TOKEN_REFRESHED': 'Token refreshed.',
     'LOGGED_OUT': 'You have been signed out.',
     'DEV_BYPASS_MODE': 'Dev mode is on: use OTP 000000.',
+    'PIN_SET': 'PIN set. You can use it to log in next time.',
+    'PIN_INVALID_FORMAT': 'PIN must be 4-6 digits.',
+    'PIN_SESSION_NOT_FOUND': 'Your session has expired. Please log in with OTP.',
+    'PIN_SESSION_INVALID': 'Your session is no longer valid. Please log in with OTP.',
+    'PIN_NOT_SET': 'No PIN is set for this account yet.',
+    'PIN_LOCKED': 'Too many incorrect attempts. Please log in with OTP.',
+    'PIN_INCORRECT': 'Incorrect PIN. {remaining} attempts remaining.',
+    'PIN_VERIFIED': 'Welcome back.',
 
     # Business
     'BUSINESS_NOT_FOUND': 'Business not found.',

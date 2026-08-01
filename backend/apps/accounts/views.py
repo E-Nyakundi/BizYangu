@@ -21,6 +21,8 @@ from .permissions import IsOwner
 from .serializers import (
     OTPRequestSerializer,
     OTPVerifySerializer,
+    PinSetSerializer,
+    PinVerifySerializer,
     UserProfileSerializer,
     UserUpdateSerializer,
 )
@@ -147,6 +149,107 @@ def otp_verify(request):
         status=status.HTTP_200_OK,
     )
     set_auth_cookies(response, tokens)
+    return response
+
+
+# ── PIN quick re-entry ──────────────────────────────────────────────────────
+# A PIN is never checked on its own — pin_verify requires the same httpOnly
+# refresh cookie that a normal OTP login already set. That cookie is what
+# proves "this device already completed a real OTP login"; the PIN is a
+# second factor on top of it, not a replacement for it. Biometric unlock is
+# handled entirely client-side (it just gates reading the PIN from secure
+# storage before calling this same endpoint) — there is no separate
+# biometric path on the backend.
+
+PIN_MAX_ATTEMPTS = 5
+PIN_LOCKOUT_MINUTES = 15
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def pin_set(request):
+    """
+    POST /api/v1/auth/pin/set/
+    Body: { pin: '1234' }
+    Requires a valid (fresh) access token — i.e. called right after a
+    normal OTP login, or from Settings while already logged in.
+    """
+    serializer = PinSetSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    request.user.set_pin(serializer.validated_data['pin'])
+    return Response({'detail': MESSAGES['PIN_SET']}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def pin_verify(request):
+    """
+    POST /api/v1/auth/pin/verify/
+    Body: { pin: '1234' }
+    No access token required — reads the refresh token from the same
+    httpOnly cookie token_refresh uses. On success, rotates both cookies
+    exactly like token_refresh does, and returns the user profile like
+    otp_verify does, so the frontend can treat this as a drop-in
+    alternative login path.
+    """
+    serializer = PinVerifySerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    submitted_pin = serializer.validated_data['pin']
+
+    refresh_token = request.COOKIES.get(REFRESH_COOKIE_NAME)
+    if not refresh_token:
+        return Response(
+            {'detail': MESSAGES['PIN_SESSION_NOT_FOUND']},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    try:
+        refresh = RefreshToken(refresh_token)
+        user = User.objects.get(id=refresh['user_id'], is_active=True)
+    except (TokenError, User.DoesNotExist):
+        return Response(
+            {'detail': MESSAGES['PIN_SESSION_INVALID']},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    if not user.has_pin:
+        return Response(
+            {'detail': MESSAGES['PIN_NOT_SET']},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if user.is_pin_locked:
+        return Response(
+            {'detail': MESSAGES['PIN_LOCKED']},
+            status=status.HTTP_429_TOO_MANY_REQUESTS,
+        )
+
+    if not user.check_pin(submitted_pin):
+        remaining = user.register_pin_failure(PIN_MAX_ATTEMPTS, PIN_LOCKOUT_MINUTES)
+        return Response(
+            {
+                'detail': MESSAGES['PIN_INCORRECT'].format(remaining=remaining),
+                'attempts_remaining': remaining,
+            },
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    user.clear_pin_failures()
+
+    try:
+        refresh.blacklist()
+    except TokenError:
+        pass  # already blacklisted/rotated concurrently — not fatal
+
+    new_tokens = get_tokens_for_user(user)
+    user.last_login = timezone.now()
+    user.save(update_fields=['last_login'])
+
+    response = Response(
+        {'detail': MESSAGES['PIN_VERIFIED'], 'user': UserProfileSerializer(user).data},
+        status=status.HTTP_200_OK,
+    )
+    set_auth_cookies(response, new_tokens)
     return response
 
 

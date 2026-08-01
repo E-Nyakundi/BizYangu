@@ -58,6 +58,17 @@ class User(AbstractBaseUser, PermissionsMixin):
     date_joined = models.DateTimeField(default=timezone.now)
     last_login = models.DateTimeField(null=True, blank=True)
 
+    # PIN quick re-entry. This is only ever checked together with a still-
+    # valid refresh token (see accounts.views.pin_verify) — a device must
+    # have already completed a full OTP login before its PIN attempt means
+    # anything, which is what keeps a short numeric PIN safe against
+    # brute force. Biometric unlock on-device is layered on top of this
+    # same check client-side; there is no separate backend path for it.
+    pin_hash = models.CharField(max_length=128, null=True, blank=True)
+    pin_set_at = models.DateTimeField(null=True, blank=True)
+    failed_pin_attempts = models.PositiveSmallIntegerField(default=0)
+    pin_locked_until = models.DateTimeField(null=True, blank=True)
+
     objects = UserManager()
 
     USERNAME_FIELD = 'phone_number'
@@ -69,6 +80,44 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return f'{self.name} ({self.phone_number})'
+
+    @property
+    def has_pin(self) -> bool:
+        return bool(self.pin_hash)
+
+    def set_pin(self, raw_pin: str) -> None:
+        from django.contrib.auth.hashers import make_password
+        self.pin_hash = make_password(raw_pin)
+        self.pin_set_at = timezone.now()
+        self.failed_pin_attempts = 0
+        self.pin_locked_until = None
+        self.save(update_fields=[
+            'pin_hash', 'pin_set_at', 'failed_pin_attempts', 'pin_locked_until',
+        ])
+
+    def check_pin(self, raw_pin: str) -> bool:
+        from django.contrib.auth.hashers import check_password
+        if not self.pin_hash:
+            return False
+        return check_password(raw_pin, self.pin_hash)
+
+    def register_pin_failure(self, max_attempts: int, lockout_minutes: int) -> int:
+        """Increments the failure counter, locking the account past max_attempts. Returns attempts remaining."""
+        from datetime import timedelta
+        self.failed_pin_attempts += 1
+        if self.failed_pin_attempts >= max_attempts:
+            self.pin_locked_until = timezone.now() + timedelta(minutes=lockout_minutes)
+        self.save(update_fields=['failed_pin_attempts', 'pin_locked_until'])
+        return max(0, max_attempts - self.failed_pin_attempts)
+
+    def clear_pin_failures(self) -> None:
+        self.failed_pin_attempts = 0
+        self.pin_locked_until = None
+        self.save(update_fields=['failed_pin_attempts', 'pin_locked_until'])
+
+    @property
+    def is_pin_locked(self) -> bool:
+        return bool(self.pin_locked_until and timezone.now() < self.pin_locked_until)
 
 
 class OTPToken(models.Model):
