@@ -7,13 +7,16 @@
  * "Payments" and "Creditors" nav items visible to OWNER and MANAGER only.
  */
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/auth'
 import { registerPushNotifications } from '@/lib/push'
 import { COPY } from '@/lib/copy'
 import Logo from '@/components/Logo'
+import PinLockScreen from '@/components/PinLockScreen'
+import { isPinEnabledOnDevice, isSessionUnlocked, setSessionUnlocked } from '@/lib/device-lock'
+import type { UserProfile } from '@/lib/types'
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: COPY.NAV_HOME, icon: '⊞', roles: null },
@@ -28,20 +31,48 @@ const NAV_ITEMS = [
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const { user, isInitialized, isLoading, hydrate } = useAuthStore()
+  const { user, isInitialized, isLoading, hydrate, setUser } = useAuthStore()
+
+  // ── PIN lock gate ──────────────────────────────────────────────────────
+  // null = still checking device state, true = show the lock screen,
+  // false = this device either has no PIN or already unlocked this
+  // session. Must resolve BEFORE hydrate() ever runs — hydrate() hits
+  // GET /auth/me, and a 401 there triggers lib/api.ts's silent
+  // access-token refresh using the still-valid refresh cookie, which
+  // would log the user straight back in and skip the PIN entirely.
+  const [deviceLocked, setDeviceLocked] = useState<boolean | null>(null)
 
   useEffect(() => {
+    let cancelled = false
+    isPinEnabledOnDevice().then((enabled) => {
+      if (cancelled) return
+      setDeviceLocked(enabled && !isSessionUnlocked())
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  function handleUnlocked(unlockedUser: UserProfile) {
+    setUser(unlockedUser)
+    setSessionUnlocked(true)
+    setDeviceLocked(false)
+  }
+
+  useEffect(() => {
+    if (deviceLocked === null || deviceLocked) return
     if (!isInitialized) hydrate()
-  }, [isInitialized, hydrate])
+  }, [deviceLocked, isInitialized, hydrate])
 
   useEffect(() => {
+    if (deviceLocked === null || deviceLocked) return
     if (!isInitialized || isLoading) return
     if (!user) {
       router.replace('/login')
     } else if (!user.business_id) {
       router.replace('/setup')
     }
-  }, [isInitialized, isLoading, user, router])
+  }, [deviceLocked, isInitialized, isLoading, user, router])
 
   useEffect(() => {
   // Gated behind NEXT_PUBLIC_PUSH_ENABLED — calling PushNotifications.register()
@@ -56,7 +87,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 }, [user?.business_id])
 
-  if (!isInitialized || isLoading || !user || !user.business_id) {
+  if (deviceLocked) {
+    return <PinLockScreen onUnlocked={handleUnlocked} />
+  }
+
+  if (deviceLocked === null || !isInitialized || isLoading || !user || !user.business_id) {
     return (
       <main style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <p className="mono" style={{ color: 'var(--color-muted)' }}>{COPY.LOADING}</p>

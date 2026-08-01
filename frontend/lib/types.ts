@@ -15,6 +15,7 @@ export interface UserProfile {
   days_remaining: number | null
   demo_expires_at: string | null
   date_joined: string
+  has_pin: boolean
 }
 
 export type BusinessType = 'DUKA' | 'HARDWARE' | 'BOUTIQUE' | 'STATIONERY' | 'CUSTOM'

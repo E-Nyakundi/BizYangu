@@ -18,6 +18,8 @@ import {
   type InviteStaffResponse,
 } from '@/lib/business'
 import { shareText } from '@/lib/share-text'
+import { isPinEnabledOnDevice, setPinEnabledOnDevice } from '@/lib/device-lock'
+import { isBiometricAvailable, isBiometricEnabled, disableBiometric } from '@/lib/biometric'
 import type { Business, StaffMember } from '@/lib/types'
 
 export default function SettingsPage() {
@@ -38,6 +40,29 @@ export default function SettingsPage() {
   async function handleToggleTheme() {
     const next = await toggleTheme()
     setThemeState(next)
+  }
+
+  // ── Security (PIN + biometric) ──────────────────────────────────────────
+  const [pinEnabled, setPinEnabledState] = useState(false)
+  const [biometricHardwareAvailable, setBiometricHardwareAvailable] = useState(false)
+  const [biometricOn, setBiometricOn] = useState(false)
+
+  useEffect(() => {
+    isPinEnabledOnDevice().then(setPinEnabledState)
+    isBiometricAvailable().then(setBiometricHardwareAvailable)
+    isBiometricEnabled().then(setBiometricOn)
+  }, [])
+
+  async function handleTurnOffPin() {
+    await disableBiometric()
+    await setPinEnabledOnDevice(false)
+    setPinEnabledState(false)
+    setBiometricOn(false)
+  }
+
+  async function handleTurnOffBiometric() {
+    await disableBiometric()
+    setBiometricOn(false)
   }
 
   async function handleLogout() {
@@ -427,6 +452,50 @@ export default function SettingsPage() {
           )}
         </div>
       )}
+
+      {/* Security: PIN + biometric */}
+      <div className="card" style={{ marginBottom: 'var(--sp-4)' }}>
+        <p className="mono" style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-3)' }}>
+          {COPY.SETTINGS_SECURITY_TITLE}
+        </p>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-3)' }}>
+          <span style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-xs)' }}>
+            {pinEnabled ? COPY.SETTINGS_SECURITY_PIN_ON : COPY.SETTINGS_SECURITY_PIN_OFF}
+          </span>
+          {pinEnabled ? (
+            <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+              <Link href="/pin/setup" className="btn-ghost" style={{ fontSize: 'var(--fs-xs)' }}>
+                {COPY.SETTINGS_SECURITY_CHANGE_PIN}
+              </Link>
+              <button className="btn-ghost" style={{ fontSize: 'var(--fs-xs)' }} onClick={handleTurnOffPin}>
+                {COPY.SETTINGS_SECURITY_TURN_OFF}
+              </button>
+            </div>
+          ) : (
+            <Link href="/pin/setup" className="btn-secondary" style={{ fontSize: 'var(--fs-xs)' }}>
+              {COPY.SETTINGS_SECURITY_SET_PIN}
+            </Link>
+          )}
+        </div>
+
+        {pinEnabled && biometricHardwareAvailable && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-xs)' }}>
+              {COPY.SETTINGS_SECURITY_BIOMETRIC}
+            </span>
+            {biometricOn ? (
+              <button className="btn-ghost" style={{ fontSize: 'var(--fs-xs)' }} onClick={handleTurnOffBiometric}>
+                {COPY.SETTINGS_SECURITY_TURN_OFF}
+              </button>
+            ) : (
+              <Link href="/pin/setup" className="btn-ghost" style={{ fontSize: 'var(--fs-xs)' }}>
+                {COPY.SETTINGS_SECURITY_SET_PIN}
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Theme toggle */}
       <div className="card" style={{ marginBottom: 'var(--sp-4)' }}>

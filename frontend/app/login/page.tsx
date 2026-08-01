@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { requestOtp, verifyOtp, useAuthStore, apiErrorMessage } from '@/lib/auth'
+import { setPinEnabledOnDevice } from '@/lib/device-lock'
 import Deepfield from '@/components/deepfield'
 import Logo from '@/components/Logo'
 import { COPY } from '@/lib/copy'
@@ -59,7 +60,12 @@ export default function LoginPage() {
       setUser(user)
       if (is_new_user || !user.business_id) {
         router.push('/setup')
+      } else if (!user.has_pin) {
+        router.push('/pin/setup')
       } else {
+        // Existing PIN, fresh OTP login on this device — (re-)arm the
+        // device lock so the next launch goes straight to quick re-entry.
+        await setPinEnabledOnDevice(true, user.name || undefined)
         router.push('/dashboard')
       }
     } catch (err) {
