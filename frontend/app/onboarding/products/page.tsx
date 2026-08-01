@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import { createProduct, importProductsCsv } from '@/lib/catalog'
 import { fetchBusiness } from '@/lib/business'
 import { fetchTaxonomy, fetchCategorySuggestions, taxonomyUnitToProductUnit } from '@/lib/knowledge'
-import { apiErrorMessage } from '@/lib/auth'
+import { apiErrorMessage, useAuthStore } from '@/lib/auth'
+import { goToApp } from '@/lib/post-login'
 import Deepfield from '@/components/deepfield'
 import { COPY } from '@/lib/copy'
 import type { Taxonomy, TaxonomyCategory, TaxonomyItem, CategorySuggestions } from '@/lib/types'
@@ -36,6 +37,7 @@ interface TaxonomySelection {
 
 export default function ProductOnboardingPage() {
   const router = useRouter()
+  const user = useAuthStore((s) => s.user)
   const [mode, setMode] = useState<'taxonomy' | 'manual' | 'csv'>('manual')
   const [rows, setRows] = useState<DraftProduct[]>([{ ...EMPTY_ROW }])
   const [isSaving, setIsSaving] = useState(false)
@@ -145,7 +147,7 @@ export default function ProductOnboardingPage() {
 
   async function handleSaveTaxonomy() {
     if (selectedCount === 0) {
-      router.push('/dashboard')
+      await goToApp(router, user)
       return
     }
     if (!allSelectedPriced) {
@@ -165,7 +167,7 @@ export default function ProductOnboardingPage() {
           created_via: 'taxonomy',
         })
       }
-      router.push('/dashboard')
+      await goToApp(router, user)
     } catch (err) {
       setError(apiErrorMessage(err, COPY.ONBOARD_SAVE_ERROR))
       setIsSaving(false)
@@ -189,7 +191,7 @@ export default function ProductOnboardingPage() {
 
   async function handleSaveManual() {
     if (validRows.length === 0) {
-      router.push('/dashboard')
+      await goToApp(router, user)
       return
     }
     setIsSaving(true)
@@ -202,7 +204,7 @@ export default function ProductOnboardingPage() {
           current_stock: row.current_stock.trim() || '0',
         })
       }
-      router.push('/dashboard')
+      await goToApp(router, user)
     } catch (err) {
       setError(apiErrorMessage(err, COPY.ONBOARD_SAVE_ERROR))
       setIsSaving(false)
@@ -296,7 +298,7 @@ export default function ProductOnboardingPage() {
                 {error && <p style={{ color: 'var(--color-error)', fontSize: 'var(--fs-sm)', marginBottom: 'var(--sp-3)' }}>{error}</p>}
 
                 <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-                  <button type="button" className="btn-ghost" onClick={() => router.push('/dashboard')} disabled={isSaving}>
+                  <button type="button" className="btn-ghost" onClick={() => goToApp(router, user)} disabled={isSaving}>
                     {COPY.ONBOARD_SKIP}
                   </button>
                   <button type="button" className="btn-primary" onClick={handleSaveTaxonomy} disabled={isSaving} style={{ flex: 1, justifyContent: 'center' }}>
@@ -355,7 +357,7 @@ export default function ProductOnboardingPage() {
             {error && <p style={{ color: 'var(--color-error)', fontSize: 'var(--fs-sm)', marginBottom: 'var(--sp-3)' }}>{error}</p>}
 
             <div style={{ display: 'flex', gap: 'var(--sp-2)', marginTop: 'var(--sp-4)' }}>
-              <button type="button" className="btn-ghost" onClick={() => router.push('/dashboard')} disabled={isSaving}>
+              <button type="button" className="btn-ghost" onClick={() => goToApp(router, user)} disabled={isSaving}>
                 {COPY.ONBOARD_SKIP}
               </button>
               <button type="button" className="btn-primary" onClick={handleSaveManual} disabled={isSaving} style={{ flex: 1, justifyContent: 'center' }}>
@@ -399,13 +401,13 @@ export default function ProductOnboardingPage() {
             {error && <p style={{ color: 'var(--color-error)', fontSize: 'var(--fs-sm)', marginBottom: 'var(--sp-3)' }}>{error}</p>}
 
             <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-              <button type="button" className="btn-ghost" onClick={() => router.push('/dashboard')}>
+              <button type="button" className="btn-ghost" onClick={() => goToApp(router, user)}>
                 {COPY.ONBOARD_SKIP}
               </button>
               <button
                 type="button"
                 className="btn-primary"
-                onClick={() => router.push('/dashboard')}
+                onClick={() => goToApp(router, user)}
                 disabled={!csvResult}
                 style={{ flex: 1, justifyContent: 'center' }}
               >
