@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { setupBusiness } from '@/lib/business'
 import { listBusinessTypes } from '@/lib/knowledge'
-import { apiErrorMessage } from '@/lib/auth'
+import { apiErrorMessage, useAuthStore } from '@/lib/auth'
 import Deepfield from '@/components/deepfield'
 import { COPY } from '@/lib/copy'
 import type { BusinessTypeInfo } from '@/lib/types'
@@ -84,6 +84,12 @@ export default function SetupPage() {
         mpesa_paybill_number: paymentMode === 'paybill' ? paybillNumber.trim() : undefined,
         mpesa_business_shortcode: paymentMode === 'paybill' ? shortcode.trim() : undefined,
       })
+      // The store's user object was set at OTP-verify time, before this
+      // business existed — it still has business_id: null. Refetch /me
+      // now so onboarding, PIN setup, and the (app) layout guard all see
+      // the real, just-created business_id instead of stale data (which
+      // otherwise reads as "no business" and bounces back here).
+      await useAuthStore.getState().hydrate()
       router.push('/onboarding/products')
     } catch (err) {
       setError(apiErrorMessage(err, COPY.ERRORS.BUSINESS_SETUP_ERROR))

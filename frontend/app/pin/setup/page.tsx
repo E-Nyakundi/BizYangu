@@ -14,7 +14,7 @@ import PinPad from '@/components/PinPad'
 import Deepfield from '@/components/deepfield'
 import Logo from '@/components/Logo'
 import { setPin } from '@/lib/pin'
-import { setPinEnabledOnDevice } from '@/lib/device-lock'
+import { setPinEnabledOnDevice, setSessionUnlocked } from '@/lib/device-lock'
 import { isBiometricAvailable, enableBiometric } from '@/lib/biometric'
 import { useAuthStore, apiErrorMessage } from '@/lib/auth'
 import { COPY } from '@/lib/copy'
@@ -60,6 +60,12 @@ export default function PinSetupPage() {
         setUser({ ...user, has_pin: true })
       }
       await setPinEnabledOnDevice(true, user?.name || undefined)
+      // Just set the PIN this second — this session already counts as
+      // unlocked. Without this, the very next screen (dashboard, or the
+      // biometric-offer step below) would find "PIN lock is on, session
+      // not unlocked" and show PinLockScreen again immediately, which
+      // also blocks the (app) layout's hydrate() from ever running.
+      setSessionUnlocked(true)
 
       const hasBiometric = await isBiometricAvailable()
       if (hasBiometric) {
