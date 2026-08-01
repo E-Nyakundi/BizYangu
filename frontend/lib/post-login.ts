@@ -14,6 +14,13 @@
  * session" — arm the device lock (so the next cold start shows the
  * lock screen) and mark the session unlocked (so we don't immediately
  * re-prompt for the PIN we just implicitly satisfied via OTP/onboarding).
+ *
+ * `user` is typed nullable because some call sites (onboarding) read it
+ * from useAuthStore, which is UserProfile | null until hydrated. In
+ * practice goToApp is only ever called once a user is known to exist
+ * (post-OTP, post-onboarding-save) — null here means something upstream
+ * is wrong, so we fail safe back to login rather than guessing at PIN
+ * state.
  */
 
 import type { useRouter } from 'next/navigation'
@@ -22,7 +29,12 @@ import { setPinEnabledOnDevice, setSessionUnlocked } from './device-lock'
 
 type Router = ReturnType<typeof useRouter>
 
-export async function goToApp(router: Router, user: UserProfile): Promise<void> {
+export async function goToApp(router: Router, user: UserProfile | null): Promise<void> {
+  if (!user) {
+    router.push('/login')
+    return
+  }
+
   if (!user.has_pin) {
     router.push('/pin/setup')
     return
