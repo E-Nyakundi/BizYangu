@@ -33,6 +33,11 @@ interface TaxonomySelection {
   // sent to the backend to find-or-create a real Category row, which is
   // what lets Stock and Sell mode group products sensibly afterward.
   categoryName: string
+  // Set when the item sits under a subcategory group (not every category
+  // has these — see TaxonomyCategory.subcategories). Sent through as
+  // taxonomy_subcategory_id so products actually nest instead of only
+  // being tagged at the top-level category.
+  subcategoryId?: string
 }
 
 export default function ProductOnboardingPage() {
@@ -91,7 +96,7 @@ export default function ProductOnboardingPage() {
     })
   }
 
-  function toggleItem(categoryId: string, categoryName: string, item: TaxonomyItem) {
+  function toggleItem(categoryId: string, categoryName: string, item: TaxonomyItem, subcategoryId?: string) {
     const key = `${categoryId}::${item.name}`
     setSelected((prev) => {
       const next = { ...prev }
@@ -101,7 +106,7 @@ export default function ProductOnboardingPage() {
         next[key] = {
           name: item.name,
           unit: taxonomyUnitToProductUnit(item.units[0]?.id ?? 'piece'),
-          price: '', categoryId, categoryName,
+          price: '', categoryId, categoryName, subcategoryId,
         }
       }
       return next
@@ -164,6 +169,8 @@ export default function ProductOnboardingPage() {
           unit: s.unit,
           current_stock: '0',
           category_name: s.categoryName,
+          taxonomy_category_id: s.categoryId,
+          taxonomy_subcategory_id: s.subcategoryId,
           created_via: 'taxonomy',
         })
       }
@@ -272,7 +279,7 @@ export default function ProductOnboardingPage() {
                       isExpanded={expanded.has(cat.category_id)}
                       onToggle={() => toggleCategory(cat.category_id)}
                       selected={selected}
-                      onToggleItem={(item) => toggleItem(cat.category_id, cat.name, item)}
+                      onToggleItem={(item, subcategoryId) => toggleItem(cat.category_id, cat.name, item, subcategoryId)}
                       suggestions={suggestions[cat.category_id]}
                       onAddSuggestion={(name) => addSuggestion(cat.category_id, cat.name, name)}
                       onPriceChange={setSelectionPrice}
@@ -287,7 +294,7 @@ export default function ProductOnboardingPage() {
                       isExpanded={expanded.has(taxonomy.retail_addon.category_id)}
                       onToggle={() => toggleCategory(taxonomy.retail_addon!.category_id)}
                       selected={selected}
-                      onToggleItem={(item) => toggleItem(taxonomy.retail_addon!.category_id, taxonomy.retail_addon!.name, item)}
+                      onToggleItem={(item, subcategoryId) => toggleItem(taxonomy.retail_addon!.category_id, taxonomy.retail_addon!.name, item, subcategoryId)}
                       suggestions={suggestions[taxonomy.retail_addon.category_id]}
                       onAddSuggestion={(name) => addSuggestion(taxonomy.retail_addon!.category_id, taxonomy.retail_addon!.name, name)}
                       onPriceChange={setSelectionPrice}
@@ -431,7 +438,7 @@ function CategoryBlock({
   isExpanded: boolean
   onToggle: () => void
   selected: Record<string, TaxonomySelection>
-  onToggleItem: (item: TaxonomyItem) => void
+  onToggleItem: (item: TaxonomyItem, subcategoryId?: string) => void
   suggestions?: CategorySuggestions
   onAddSuggestion: (name: string) => void
   onPriceChange: (key: string, price: string) => void
@@ -443,8 +450,8 @@ function CategoryBlock({
   // items directly — never both. Flatten to a uniform list of
   // (groupLabel | null, items) pairs so the render below doesn't need to
   // branch on which shape it got.
-  const groups: { label: string | null; items: TaxonomyItem[] }[] = category.subcategories
-    ? category.subcategories.map((sub) => ({ label: sub.name, items: sub.items }))
+  const groups: { label: string | null; subcategoryId?: string; items: TaxonomyItem[] }[] = category.subcategories
+    ? category.subcategories.map((sub) => ({ label: sub.name, subcategoryId: sub.subcategory_id, items: sub.items }))
     : [{ label: null, items: category.items ?? [] }]
 
   const suggestedNames = (suggestions?.suggested_names ?? []).filter(
@@ -487,7 +494,7 @@ function CategoryBlock({
                   key={item.name}
                   item={item}
                   selection={selected[`${categoryId}::${item.name}`]}
-                  onToggle={() => onToggleItem(item)}
+                  onToggle={() => onToggleItem(item, group.subcategoryId)}
                   onPriceChange={(price) => onPriceChange(`${categoryId}::${item.name}`, price)}
                 />
               ))}

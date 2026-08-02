@@ -40,6 +40,16 @@ class ProductSerializer(serializers.ModelSerializer):
             'unit', 'current_stock', 'low_stock_threshold',
             'track_stock', 'image', 'is_active',
             'category', 'category_name',
+            # Phase 8 taxonomy tags. These were on the Product model since
+            # migration 0003 but never exposed on this serializer, so every
+            # create/edit path (onboarding's taxonomy picker included) was
+            # silently dropping them and falling back to the flat `category`
+            # get-or-create bucket instead. Writable here (not read_only) so
+            # onboarding, manual Add Product, and the product-edit screen can
+            # all set them, and the knowledge app's within-business
+            # suggestions endpoint (which filters on these fields) actually
+            # has data to match against.
+            'taxonomy_category_id', 'taxonomy_subcategory_id', 'taxonomy_brand',
             'stock_status',
             'created_at', 'updated_at',
         ]

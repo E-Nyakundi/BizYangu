@@ -17,6 +17,14 @@ export interface ProductCreatePayload {
   // only knows a taxonomy category's display name, never a pre-existing
   // Category id. Ignored if `category` (an id) is also given.
   category_name?: string
+  // Phase 8 taxonomy tags — set alongside category/category_name (not
+  // instead of) so the flat Category bucket still exists for display,
+  // but the product also carries its real place in the taxonomy tree.
+  // This is what powers the knowledge app's within-business suggestions
+  // and stops every non-onboarding product from landing "uncategorized".
+  taxonomy_category_id?: string
+  taxonomy_subcategory_id?: string
+  taxonomy_brand?: string
   // Phase 13 (Data Health) provenance tag. Reconciliation and CSV
   // import set this server-side instead — this is only for the two
   // paths that share this same create endpoint (taxonomy onboarding
@@ -32,6 +40,18 @@ export async function createProduct(payload: ProductCreatePayload): Promise<Prod
 
 export async function listProducts(): Promise<Product[]> {
   const { data } = await api.get('/catalog/products/')
+  return data
+}
+
+export interface CategoryOption {
+  id: string
+  name: string
+}
+
+/** Existing Category rows for this business — used to offer "pick an
+ * existing category" alongside the taxonomy tree in Add Product flows. */
+export async function listCategories(): Promise<CategoryOption[]> {
+  const { data } = await api.get('/catalog/categories/')
   return data
 }
 

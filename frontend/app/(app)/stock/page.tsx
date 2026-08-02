@@ -17,10 +17,11 @@ import {
   type StockMovement,
 } from '@/lib/inventory'
 import { createSale, listUnreconciled, resolveUnreconciled, type UnreconciledGroup } from '@/lib/transactions'
-import { createProduct, listProducts } from '@/lib/catalog'
-import { PRODUCT_UNITS, productUnitLabel } from '@/lib/knowledge'
+import { createProduct, listProducts, listCategories, type CategoryOption } from '@/lib/catalog'
+import { PRODUCT_UNITS, productUnitLabel, fetchTaxonomy } from '@/lib/knowledge'
+import { fetchBusiness } from '@/lib/business'
 import { groupByCategory } from '@/lib/grouping'
-import type { Product } from '@/lib/types'
+import type { Product, Taxonomy } from '@/lib/types'
 import { COPY } from '@/lib/copy'
 
 // ── Re-use transactions endpoint for stock-in / adjustment / loss ────────────
@@ -323,8 +324,34 @@ function AddProductModal({ onClose, onDone }: {
   const [error, setError] = useState('')
   const [justSaved, setJustSaved] = useState(false)
 
+  // ── Category picker (item 9 fix) ────────────────────────────────────────
+  // Previously this modal never sent a category at all, so anything added
+  // here landed uncategorized regardless of the business's taxonomy. Now
+  // it offers: the business's existing Category rows, its taxonomy tree
+  // (same source onboarding uses), or a free-typed new category.
+  const [existingCategories, setExistingCategories] = useState<CategoryOption[]>([])
+  const [taxonomy, setTaxonomy] = useState<Taxonomy | null>(null)
+  // Encodes the choice: '' (uncategorized), 'new', 'existing:<id>', or
+  // 'taxonomy:<category_id>'.
+  const [categoryKey, setCategoryKey] = useState<string>('')
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [subcategoryId, setSubcategoryId] = useState<string>('')
+
+  useEffect(() => {
+    listCategories().then(setExistingCategories).catch(() => {/* non-critical */})
+    fetchBusiness()
+      .then((business) => business.taxonomy_type_id ? fetchTaxonomy(business.taxonomy_type_id) : null)
+      .then((t) => setTaxonomy(t))
+      .catch(() => {/* non-critical — picker still works with existing categories only */})
+  }, [])
+
+  const selectedTaxonomyCategory = categoryKey.startsWith('taxonomy:')
+    ? taxonomy?.categories.find((c) => c.category_id === categoryKey.slice('taxonomy:'.length))
+    : undefined
+
   function resetForm() {
     setName(''); setPrice(''); setCost(''); setQty(''); setThreshold('')
+    setCategoryKey(''); setNewCategoryName(''); setSubcategoryId('')
   }
 
   async function handleSubmit(addAnother: boolean) {
@@ -333,6 +360,18 @@ function AddProductModal({ onClose, onDone }: {
     if (isNaN(sellingPrice) || sellingPrice <= 0) { setError(COPY.STOCK_NEW_PRICE_ERROR); return }
     setLoading(true); setError('')
     try {
+      const categoryFields =
+        categoryKey === 'new'
+          ? { category_name: newCategoryName.trim() || undefined }
+          : categoryKey.startsWith('existing:')
+          ? { category: categoryKey.slice('existing:'.length) }
+          : categoryKey.startsWith('taxonomy:')
+          ? {
+              category_name: selectedTaxonomyCategory?.name,
+              taxonomy_category_id: selectedTaxonomyCategory?.category_id,
+              taxonomy_subcategory_id: subcategoryId || undefined,
+            }
+          : {}
       await createProduct({
         name: name.trim(),
         selling_price: price.trim(),
@@ -341,6 +380,7 @@ function AddProductModal({ onClose, onDone }: {
         low_stock_threshold: threshold.trim() || undefined,
         unit,
         created_via: 'manual',
+        ...categoryFields,
       })
       onDone()
       if (addAnother) {
@@ -369,6 +409,47 @@ function AddProductModal({ onClose, onDone }: {
         <input className="input" type="text" placeholder={COPY.STOCK_NEW_NAME_PLACEHOLDER}
           value={name} onChange={(e) => setName(e.target.value)} autoFocus style={{ width: '100%' }} />
       </Field>
+
+      <Field label={COPY.STOCK_NEW_CATEGORY_LABEL}>
+        <select className="input" style={{ width: '100%' }} value={categoryKey}
+          onChange={(e) => { setCategoryKey(e.target.value); setSubcategoryId('') }}>
+          <option value="">{COPY.STOCK_NEW_CATEGORY_UNCATEGORIZED}</option>
+          {existingCategories.length > 0 && (
+            <optgroup label={COPY.STOCK_NEW_CATEGORY_EXISTING_GROUP}>
+              {existingCategories.map((c) => (
+                <option key={c.id} value={`existing:${c.id}`}>{c.name}</option>
+              ))}
+            </optgroup>
+          )}
+          {taxonomy && taxonomy.categories.length > 0 && (
+            <optgroup label={COPY.STOCK_NEW_CATEGORY_TAXONOMY_GROUP}>
+              {taxonomy.categories.map((c) => (
+                <option key={c.category_id} value={`taxonomy:${c.category_id}`}>{c.name}</option>
+              ))}
+            </optgroup>
+          )}
+          <option value="new">{COPY.STOCK_NEW_CATEGORY_NEW_OPTION}</option>
+        </select>
+      </Field>
+
+      {categoryKey === 'new' && (
+        <Field label={COPY.STOCK_NEW_CATEGORY_NAME_LABEL}>
+          <input className="input" type="text" placeholder={COPY.STOCK_NEW_CATEGORY_NAME_PLACEHOLDER}
+            value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} style={{ width: '100%' }} />
+        </Field>
+      )}
+
+      {selectedTaxonomyCategory?.subcategories && selectedTaxonomyCategory.subcategories.length > 0 && (
+        <Field label={COPY.STOCK_NEW_CATEGORY_SUBCATEGORY_LABEL}>
+          <select className="input" style={{ width: '100%' }} value={subcategoryId}
+            onChange={(e) => setSubcategoryId(e.target.value)}>
+            <option value="">{COPY.STOCK_NEW_CATEGORY_SUBCATEGORY_NONE}</option>
+            {selectedTaxonomyCategory.subcategories.map((sub) => (
+              <option key={sub.subcategory_id} value={sub.subcategory_id}>{sub.name}</option>
+            ))}
+          </select>
+        </Field>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--sp-2)' }}>
         <Field label={COPY.STOCK_NEW_PRICE_LABEL}>
