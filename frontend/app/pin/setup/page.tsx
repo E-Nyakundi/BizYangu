@@ -14,9 +14,9 @@ import PinPad from '@/components/PinPad'
 import Deepfield from '@/components/deepfield'
 import Logo from '@/components/Logo'
 import { setPin } from '@/lib/pin'
-import { setPinEnabledOnDevice, setSessionUnlocked } from '@/lib/device-lock'
 import { isBiometricAvailable, enableBiometric } from '@/lib/biometric'
-import { useAuthStore, apiErrorMessage } from '@/lib/auth'
+import { apiErrorMessage } from '@/lib/auth'
+import { finishPinSetup } from '@/lib/post-login'
 import { COPY } from '@/lib/copy'
 
 type Step = 'enter' | 'confirm' | 'biometric-offer' | 'saving'
@@ -25,8 +25,6 @@ const PIN_LENGTH = 4
 
 export default function PinSetupPage() {
   const router = useRouter()
-  const user = useAuthStore((s) => s.user)
-  const setUser = useAuthStore((s) => s.setUser)
 
   const [step, setStep] = useState<Step>('enter')
   const [firstPin, setFirstPin] = useState('')
@@ -56,23 +54,19 @@ export default function PinSetupPage() {
     setError(null)
     try {
       await setPin(pin)
-      if (user) {
-        setUser({ ...user, has_pin: true })
-      }
-      await setPinEnabledOnDevice(true, user?.name || undefined)
-      // Just set the PIN this second — this session already counts as
-      // unlocked. Without this, the very next screen (dashboard, or the
-      // biometric-offer step below) would find "PIN lock is on, session
-      // not unlocked" and show PinLockScreen again immediately, which
-      // also blocks the (app) layout's hydrate() from ever running.
-      setSessionUnlocked(true)
-
+      // Deliberately not touching device-lock/session state or the
+      // store here — finishPinSetup() below re-fetches the profile
+      // (which will now show has_pin: true, since setPin() just
+      // succeeded) and handles arming the device lock + marking the
+      // session unlocked itself. One authoritative place decides
+      // "you're in" instead of this screen keeping its own parallel
+      // copy of that logic.
       const hasBiometric = await isBiometricAvailable()
       if (hasBiometric) {
         setConfirmedPin(pin)
         setStep('biometric-offer')
       } else {
-        router.replace('/dashboard')
+        await finishPinSetup(router)
       }
     } catch (err) {
       setError(apiErrorMessage(err))
@@ -85,12 +79,12 @@ export default function PinSetupPage() {
   async function handleEnableBiometric() {
     if (confirmedPin) await enableBiometric(confirmedPin)
     setConfirmedPin('')
-    router.replace('/dashboard')
+    await finishPinSetup(router)
   }
 
-  function skipToDashboard() {
+  async function skipToDashboard() {
     setConfirmedPin('')
-    router.replace('/dashboard')
+    await finishPinSetup(router)
   }
 
   return (
