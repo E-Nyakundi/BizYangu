@@ -22,8 +22,26 @@ async function getPlugin() {
   return mod.NativeBiometric
 }
 
+/**
+ * capacitor-native-biometric is native-only — Android Keystore / iOS
+ * Keychain simply don't exist in a browser. On a real device its web
+ * stub should fail fast, but that's not guaranteed for every plugin
+ * (some hang instead of rejecting when there's no native bridge to
+ * answer). Checking Capacitor.isNativePlatform() first means we never
+ * even attempt the call on web — no plugin behavior to depend on.
+ */
+async function isNative(): Promise<boolean> {
+  try {
+    const { Capacitor } = await import('@capacitor/core')
+    return Capacitor.isNativePlatform()
+  } catch {
+    return false
+  }
+}
+
 /** Does this device have usable biometric hardware enrolled at all? */
 export async function isBiometricAvailable(): Promise<boolean> {
+  if (!(await isNative())) return false
   try {
     const NativeBiometric = await getPlugin()
     const result = await NativeBiometric.isAvailable()
@@ -51,6 +69,7 @@ export async function isBiometricEnabled(): Promise<boolean> {
  * still in memory.
  */
 export async function enableBiometric(pin: string): Promise<boolean> {
+  if (!(await isNative())) return false
   try {
     const NativeBiometric = await getPlugin()
     await NativeBiometric.verifyIdentity({
@@ -72,6 +91,7 @@ export async function enableBiometric(pin: string): Promise<boolean> {
 
 /** Turn biometric unlock off and wipe the stored PIN from the Keystore/Keychain. */
 export async function disableBiometric(): Promise<void> {
+  if (!(await isNative())) return
   try {
     const NativeBiometric = await getPlugin()
     await NativeBiometric.deleteCredentials({ server: BIOMETRIC_SERVER })
@@ -93,6 +113,7 @@ export async function disableBiometric(): Promise<void> {
  * so the caller can silently fall back to the manual PIN pad.
  */
 export async function unlockPinWithBiometric(): Promise<string | null> {
+  if (!(await isNative())) return null
   try {
     const NativeBiometric = await getPlugin()
     await NativeBiometric.verifyIdentity({
