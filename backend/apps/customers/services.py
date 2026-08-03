@@ -12,22 +12,36 @@ from django.db.models import Sum, Min
 
 
 def customer_balance(customer):
-    """Outstanding KES this customer owes: CREDIT sales - refunds against
-    those sales - payments recorded. Every term excludes voided
-    transactions, same as everywhere else in the app treats voids as if
-    they never happened."""
+    """Outstanding KES this customer owes: CREDIT/MIXED sales' credit
+    portion - refunds against those sales - payments recorded. Every term
+    excludes voided transactions, same as everywhere else in the app
+    treats voids as if they never happened.
+
+    Sums credit_amount rather than total_amount (item D13) — for a plain
+    CREDIT sale the two are equal, but a MIXED sale's credit_amount is
+    only part of the total, and only that part is actually owed.
+    """
     from apps.transactions.models import Transaction
 
     sales = Transaction.objects.filter(
         customer=customer,
         type=Transaction.Type.SALE,
-        payment_method=Transaction.PaymentMethod.CREDIT,
+        payment_method__in=[Transaction.PaymentMethod.CREDIT, Transaction.PaymentMethod.MIXED],
         is_voided=False,
-    ).aggregate(t=Sum('total_amount'))['t'] or Decimal('0.00')
+    ).aggregate(t=Sum('credit_amount'))['t'] or Decimal('0.00')
 
+    # NOTE: refunds against a MIXED sale are apportioned against
+    # total_amount here, same as before this change — there's no
+    # per-line record of which payment method a refunded item's money
+    # originally came from, so a refund on a MIXED sale is treated as
+    # coming entirely out of the credit portion first up to its size.
+    # This can undercount in edge cases (e.g. refunding an item that was
+    # actually paid for in cash, on a sale that also had some credit) —
+    # flagging as a known limitation rather than silently getting it
+    # wrong in a way that's hard to notice.
     refunds = Transaction.objects.filter(
         original_transaction__customer=customer,
-        original_transaction__payment_method=Transaction.PaymentMethod.CREDIT,
+        original_transaction__payment_method__in=[Transaction.PaymentMethod.CREDIT, Transaction.PaymentMethod.MIXED],
         type=Transaction.Type.REFUND,
         is_voided=False,
     ).aggregate(t=Sum('total_amount'))['t'] or Decimal('0.00')
@@ -40,19 +54,20 @@ def customer_balance(customer):
 
 def oldest_outstanding_sale_date(customer):
     """
-    Date of the customer's earliest CREDIT sale, used as the "age" sort
-    key for the creditor list. Approximate on purpose (Phase 12 settles
-    against the total balance, not per-sale, so there's no exact per-sale
-    "this one is still unpaid" flag to sort by) — the oldest credit sale
-    is a reasonable proxy for "how long has this person owed us money."
-    Returns None if the customer has never had a CREDIT sale.
+    Date of the customer's earliest CREDIT/MIXED sale, used as the "age"
+    sort key for the creditor list. Approximate on purpose (Phase 12
+    settles against the total balance, not per-sale, so there's no exact
+    per-sale "this one is still unpaid" flag to sort by) — the oldest
+    credit sale is a reasonable proxy for "how long has this person owed
+    us money." Returns None if the customer has never had a CREDIT/MIXED
+    sale with a credit portion.
     """
     from apps.transactions.models import Transaction
 
     result = Transaction.objects.filter(
         customer=customer,
         type=Transaction.Type.SALE,
-        payment_method=Transaction.PaymentMethod.CREDIT,
+        payment_method__in=[Transaction.PaymentMethod.CREDIT, Transaction.PaymentMethod.MIXED],
         is_voided=False,
     ).aggregate(d=Min('created_at'))['d']
     return result

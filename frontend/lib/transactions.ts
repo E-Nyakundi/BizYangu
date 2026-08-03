@@ -20,6 +20,19 @@ export interface SaleCreatePayload {
   payment_method: PaymentMethod
   mpesa_reference?: string
   notes?: string
+  // Split-payment breakdown — only read by the backend when
+  // payment_method is MIXED; ignored otherwise.
+  cash_amount?: string
+  mpesa_amount?: string
+  credit_amount?: string
+  // Credit-portion customer capture — required by the backend whenever
+  // the resolved credit amount is > 0 (payment_method CREDIT, or MIXED
+  // with a non-zero credit_amount). Pass customer_id to bill an existing
+  // customer, or customer_name (+ optional customer_phone) to
+  // get-or-create one inline.
+  customer_id?: string
+  customer_name?: string
+  customer_phone?: string
 }
 
 export async function createSale(payload: SaleCreatePayload): Promise<Transaction> {

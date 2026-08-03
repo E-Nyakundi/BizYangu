@@ -527,6 +527,16 @@ export default function SellPage() {
   const [mpesaRef, setMpesaRef] = useState('')
   const [notes, setNotes] = useState('')
 
+  // Split-payment breakdown — only relevant when paymentMethod === 'MIXED'
+  const [splitCash, setSplitCash] = useState('')
+  const [splitMpesa, setSplitMpesa] = useState('')
+  const [splitCredit, setSplitCredit] = useState('')
+
+  // Credit-portion customer capture — required whenever paymentMethod is
+  // 'CREDIT', or 'MIXED' with a non-zero splitCredit
+  const [customerName, setCustomerName] = useState('')
+  const [customerPhone, setCustomerPhone] = useState('')
+
   // Submit state
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
@@ -709,8 +719,32 @@ export default function SellPage() {
 
   async function handleConfirmSale() {
     if (cart.length === 0) return
+
+    // Client-side checks — the backend re-validates authoritatively, but
+    // catching these here avoids a round-trip for the common mistakes.
+    if (paymentMethod === 'CREDIT' && !customerName.trim()) {
+      setSubmitError(COPY.SELL_CREDIT_CUSTOMER_REQUIRED)
+      return
+    }
+    let mixedCash = 0, mixedMpesa = 0, mixedCredit = 0
+    if (paymentMethod === 'MIXED') {
+      mixedCash = parseFloat(splitCash) || 0
+      mixedMpesa = parseFloat(splitMpesa) || 0
+      mixedCredit = parseFloat(splitCredit) || 0
+      if (Math.abs(mixedCash + mixedMpesa + mixedCredit - total) > 0.01) {
+        setSubmitError(COPY.SELL_MIXED_AMOUNTS_MISMATCH.replace('{total}', total.toLocaleString()))
+        return
+      }
+      if (mixedCredit > 0 && !customerName.trim()) {
+        setSubmitError(COPY.SELL_CREDIT_CUSTOMER_REQUIRED)
+        return
+      }
+    }
+
     setSubmitting(true)
     setSubmitError('')
+
+    const needsCustomer = paymentMethod === 'CREDIT' || (paymentMethod === 'MIXED' && mixedCredit > 0)
 
     const payload = {
       items: cart.map((item) =>
@@ -728,6 +762,15 @@ export default function SellPage() {
       payment_method: paymentMethod,
       mpesa_reference: paymentMethod === 'MPESA' ? '' : mpesaRef.trim(), // STK path sets ref later
       notes: notes.trim(),
+      ...(paymentMethod === 'MIXED' && {
+        cash_amount: String(mixedCash),
+        mpesa_amount: String(mixedMpesa),
+        credit_amount: String(mixedCredit),
+      }),
+      ...(needsCustomer && {
+        customer_name: customerName.trim(),
+        customer_phone: customerPhone.trim() || undefined,
+      }),
     }
 
     try {
@@ -792,6 +835,11 @@ export default function SellPage() {
     setMpesaPhone('')
     setMpesaRef('')
     setNotes('')
+    setSplitCash('')
+    setSplitMpesa('')
+    setSplitCredit('')
+    setCustomerName('')
+    setCustomerPhone('')
     setSubmitError('')
     setCompletedTxn(null)
     setStkState(null)
@@ -1071,21 +1119,119 @@ export default function SellPage() {
                 </div>
               )}
 
-              {/* MIXED payment — just the manual ref */}
+              {/* MIXED payment — real split, not cosmetic (item D13) */}
               {paymentMethod === 'MIXED' && (
                 <div style={{ marginBottom: 'var(--sp-3)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--sp-2)', marginBottom: 'var(--sp-2)' }}>
+                    <div>
+                      <label style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', display: 'block', marginBottom: 'var(--sp-1)' }}>
+                        {COPY.SELL_SPLIT_CASH_LABEL}
+                      </label>
+                      <input
+                        className="input mono" type="number" inputMode="decimal" min="0" placeholder="0"
+                        value={splitCash} onChange={(e) => setSplitCash(e.target.value)}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', display: 'block', marginBottom: 'var(--sp-1)' }}>
+                        {COPY.SELL_SPLIT_MPESA_LABEL}
+                      </label>
+                      <input
+                        className="input mono" type="number" inputMode="decimal" min="0" placeholder="0"
+                        value={splitMpesa} onChange={(e) => setSplitMpesa(e.target.value)}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', display: 'block', marginBottom: 'var(--sp-1)' }}>
+                        {COPY.SELL_SPLIT_CREDIT_LABEL}
+                      </label>
+                      <input
+                        className="input mono" type="number" inputMode="decimal" min="0" placeholder="0"
+                        value={splitCredit} onChange={(e) => setSplitCredit(e.target.value)}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  </div>
+                  {(() => {
+                    const remaining = total - ((parseFloat(splitCash) || 0) + (parseFloat(splitMpesa) || 0) + (parseFloat(splitCredit) || 0))
+                    const rounded = Math.round(remaining * 100) / 100
+                    if (rounded === 0) return null
+                    const label = rounded > 0
+                      ? COPY.SELL_SPLIT_REMAINING.replace('{amount}', rounded.toLocaleString())
+                      : COPY.SELL_SPLIT_OVER.replace('{amount}', Math.abs(rounded).toLocaleString())
+                    return (
+                      <p style={{ fontSize: 'var(--fs-xs)', color: rounded > 0 ? 'var(--color-muted)' : 'var(--color-danger, #e5484d)', marginBottom: 'var(--sp-2)' }}>
+                        {label}
+                      </p>
+                    )
+                  })()}
+                  {(parseFloat(splitMpesa) || 0) > 0 && (
+                    <>
+                      <label style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', display: 'block', marginBottom: 'var(--sp-1)' }}>
+                        {COPY.SELL_MPESA_REF_OPTIONAL}
+                      </label>
+                      <input
+                        className="input mono"
+                        type="text"
+                        placeholder="QFH3K2MRCE"
+                        value={mpesaRef}
+                        onChange={(e) => setMpesaRef(e.target.value.toUpperCase())}
+                        maxLength={20}
+                        style={{ width: '100%', letterSpacing: '0.05em', marginBottom: 'var(--sp-2)' }}
+                      />
+                    </>
+                  )}
+                  {(parseFloat(splitCredit) || 0) > 0 && (
+                    <div style={{ paddingTop: 'var(--sp-2)', borderTop: '1px solid var(--surface-4)' }}>
+                      <label style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', display: 'block', marginBottom: 'var(--sp-1)' }}>
+                        {COPY.SELL_CREDIT_CUSTOMER_NAME_LABEL}
+                      </label>
+                      <input
+                        className="input" type="text" placeholder={COPY.SELL_CREDIT_CUSTOMER_NAME_PLACEHOLDER}
+                        value={customerName} onChange={(e) => setCustomerName(e.target.value)}
+                        style={{ width: '100%', marginBottom: 'var(--sp-2)' }}
+                      />
+                      <label style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', display: 'block', marginBottom: 'var(--sp-1)' }}>
+                        {COPY.SELL_CREDIT_CUSTOMER_PHONE_LABEL}
+                      </label>
+                      <input
+                        className="input mono" type="tel" placeholder={COPY.SELL_CREDIT_CUSTOMER_PHONE_PLACEHOLDER}
+                        value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value.trim())}
+                        maxLength={15}
+                        style={{ width: '100%' }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CREDIT payment — customer capture (item D16). This section
+                  didn't exist at all before — a credit sale never asked
+                  who owed the money, and never touched the Creditors list. */}
+              {paymentMethod === 'CREDIT' && (
+                <div style={{ marginBottom: 'var(--sp-3)' }}>
                   <label style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', display: 'block', marginBottom: 'var(--sp-1)' }}>
-                    {COPY.SELL_MPESA_REF_OPTIONAL}
+                    {COPY.SELL_CREDIT_CUSTOMER_NAME_LABEL}
                   </label>
                   <input
-                    className="input mono"
-                    type="text"
-                    placeholder="QFH3K2MRCE"
-                    value={mpesaRef}
-                    onChange={(e) => setMpesaRef(e.target.value.toUpperCase())}
-                    maxLength={20}
-                    style={{ width: '100%', letterSpacing: '0.05em' }}
+                    className="input" type="text" placeholder={COPY.SELL_CREDIT_CUSTOMER_NAME_PLACEHOLDER}
+                    value={customerName} onChange={(e) => setCustomerName(e.target.value)}
+                    style={{ width: '100%', marginBottom: 'var(--sp-2)' }}
                   />
+                  <label style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', display: 'block', marginBottom: 'var(--sp-1)' }}>
+                    {COPY.SELL_CREDIT_CUSTOMER_PHONE_LABEL}
+                  </label>
+                  <input
+                    className="input mono" type="tel" placeholder={COPY.SELL_CREDIT_CUSTOMER_PHONE_PLACEHOLDER}
+                    value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value.trim())}
+                    maxLength={15}
+                    style={{ width: '100%', marginBottom: 'var(--sp-1)' }}
+                  />
+                  <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>
+                    {COPY.SELL_CREDIT_CUSTOMER_HELP}
+                  </p>
                 </div>
               )}
 

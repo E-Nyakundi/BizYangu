@@ -66,6 +66,18 @@ class Transaction(models.Model):
         'customers.Customer', on_delete=models.SET_NULL,
         null=True, blank=True, related_name='transactions',
     )
+    # Split-payment breakdown (item D13 fix). Populated for every SALE
+    # regardless of payment_method — not just MIXED — so downstream code
+    # (customer_balance in particular) never has to branch on
+    # payment_method vs read total_amount; it can always trust
+    # credit_amount directly. For a plain CASH sale, cash_amount ==
+    # total_amount and mpesa_amount/credit_amount are 0; same pattern for
+    # MPESA/CREDIT. Only a MIXED sale actually splits across more than
+    # one of these. The three are validated to sum to total_amount in
+    # views.create_sale before the transaction is written.
+    cash_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    mpesa_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    credit_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     class Meta:
         ordering = ['-created_at']

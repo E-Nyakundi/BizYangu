@@ -140,12 +140,71 @@ def create_sale(request):
             'subtotal': subtotal,
         })
 
+    # ── Resolve split-payment breakdown (item D13) ──────────────────────
+    # Every SALE gets a real cash/mpesa/credit breakdown now, not just a
+    # payment_method tag. For single-method sales the full total goes into
+    # the one matching column; MIXED is the only case where the client's
+    # own numbers are used, and even then only after they're checked
+    # against the server-computed total — never trust a client total.
+    method = data['payment_method']
+    if method == Transaction.PaymentMethod.MIXED:
+        cash_amount = data.get('cash_amount') or Decimal('0.00')
+        mpesa_amount = data.get('mpesa_amount') or Decimal('0.00')
+        credit_amount = data.get('credit_amount') or Decimal('0.00')
+        if (cash_amount + mpesa_amount + credit_amount) != total:
+            return Response(
+                {'detail': MESSAGES['MIXED_PAYMENT_AMOUNTS_MISMATCH'].format(total=total)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    else:
+        cash_amount = total if method == Transaction.PaymentMethod.CASH else Decimal('0.00')
+        mpesa_amount = total if method == Transaction.PaymentMethod.MPESA else Decimal('0.00')
+        credit_amount = total if method == Transaction.PaymentMethod.CREDIT else Decimal('0.00')
+
+    # ── Resolve customer for the credit portion (item D16) ──────────────
+    customer = None
+    if credit_amount > 0:
+        from apps.customers.models import Customer
+        customer_id = data.get('customer_id')
+        customer_name = data.get('customer_name', '').strip()
+        if customer_id:
+            try:
+                customer = Customer.objects.get(id=customer_id, business=business, is_active=True)
+            except Customer.DoesNotExist:
+                return Response(
+                    {'detail': MESSAGES['CUSTOMER_NOT_FOUND']},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        elif customer_name:
+            customer_phone = data.get('customer_phone', '').strip()
+            # Same get-or-create-by-phone shape the Creditors "Add
+            # customer" flow uses — a repeat customer paying on credit
+            # again shouldn't fork into a second ledger row just because
+            # the cashier retyped their name slightly differently, as
+            # long as the phone number matches.
+            if customer_phone:
+                customer, _ = Customer.objects.get_or_create(
+                    business=business, phone=customer_phone,
+                    defaults={'name': customer_name},
+                )
+            else:
+                customer = Customer.objects.create(business=business, name=customer_name)
+        else:
+            return Response(
+                {'detail': MESSAGES['CREDIT_CUSTOMER_REQUIRED']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
     with db_transaction.atomic():
         txn = Transaction.objects.create(
             business=business,
             type=Transaction.Type.SALE,
             total_amount=total,
             payment_method=data['payment_method'],
+            cash_amount=cash_amount,
+            mpesa_amount=mpesa_amount,
+            credit_amount=credit_amount,
+            customer=customer,
             # M-Pesa sales start PENDING — the STK push hasn't been sent yet,
             # let alone confirmed by the customer. The callback (or manual
             # reconciliation) flips this to CONFIRMED. Every other payment

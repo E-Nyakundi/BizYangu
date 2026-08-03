@@ -59,6 +59,27 @@ class SaleCreateSerializer(serializers.Serializer):
     mpesa_reference = serializers.CharField(max_length=50, required=False, allow_blank=True)
     notes = serializers.CharField(max_length=1000, required=False, allow_blank=True)
 
+    # Split-payment breakdown (item D13). Only meaningful when
+    # payment_method == MIXED — for every other method the view derives
+    # the single relevant amount from the computed total itself, so these
+    # are ignored rather than required in that case. When MIXED, all
+    # three that apply must be given and must sum to the computed total;
+    # the view does that check once it knows the real total (never trust
+    # a client-supplied total for this).
+    cash_amount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, allow_null=True)
+    mpesa_amount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, allow_null=True)
+    credit_amount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False, allow_null=True)
+
+    # Customer capture for the credit portion of a sale (item D16). Either
+    # pass customer_id to bill an existing customer, or customer_name (+
+    # optional customer_phone) to get-or-create one on the fly — the same
+    # two paths the Creditors tab's "Add customer" flow already supports.
+    # Required by the view whenever the resolved credit amount is > 0;
+    # optional otherwise.
+    customer_id = serializers.UUIDField(required=False, allow_null=True)
+    customer_name = serializers.CharField(max_length=200, required=False, allow_blank=True)
+    customer_phone = serializers.CharField(max_length=20, required=False, allow_blank=True)
+
     def validate_mpesa_reference(self, value):
         return value.strip().upper() if value else ''
 
@@ -140,6 +161,7 @@ class TransactionSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'type', 'reference_number', 'total_amount',
             'payment_method', 'payment_status', 'mpesa_reference',
+            'cash_amount', 'mpesa_amount', 'credit_amount', 'customer',
             'notes', 'created_by', 'created_by_name', 'created_at',
             'is_voided', 'void_reason', 'original_transaction', 'refunded_amount',
             'items',
@@ -148,6 +170,7 @@ class TransactionSerializer(serializers.ModelSerializer):
             'id', 'reference_number', 'total_amount', 'created_by',
             'created_by_name', 'created_at', 'is_voided', 'void_reason',
             'original_transaction', 'refunded_amount',
+            'cash_amount', 'mpesa_amount', 'credit_amount',
         ]
 
 
