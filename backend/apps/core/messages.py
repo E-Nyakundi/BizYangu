@@ -159,6 +159,11 @@ MESSAGES = {
     'INVALID_PHONE_NUMBER': 'Invalid phone number.',
     'INVALID_PHONE_NUMBER_FORMAT': 'Invalid phone number. Use format: +254XXXXXXXXX or 07XXXXXXXX',
 
+    # Customers & Credit (Phase 12)
+    'CUSTOMER_PHONE_IN_USE': 'A customer with this phone number already exists.',
+    'SETTLEMENT_RECORDED': 'Payment recorded.',
+    'SETTLEMENT_AMOUNT_EXCEEDS_BALANCE': 'Amount ({amount}) exceeds the outstanding balance ({balance}).',
+
     # Generic
     'SUCCESS': 'Operation completed successfully.',
     'ERROR': 'An error occurred. Please try again.',
@@ -305,6 +310,11 @@ MESSAGES_SW = {
     'NOT_FOUND': 'Haikusumatwa.',
     'INVALID_PHONE_NUMBER': 'Namba ya simu si sahihi.',
     'INVALID_PHONE_NUMBER_FORMAT': 'Nambari ya simu si sahihi. Tumia muundo: +254XXXXXXXXX au 07XXXXXXXX',
+
+    # Customers & Credit (Phase 12)
+    'CUSTOMER_PHONE_IN_USE': 'Mteja mwenye namba hii ya simu tayari yupo.',
+    'SETTLEMENT_RECORDED': 'Malipo yamerekodiwa.',
+    'SETTLEMENT_AMOUNT_EXCEEDS_BALANCE': 'Kiasi ({amount}) kimezidi deni lililobaki ({balance}).',
 
     # Generic
     'SUCCESS': 'Kitendo kimefaulu.',
