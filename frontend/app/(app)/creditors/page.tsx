@@ -34,7 +34,7 @@ export default function CreditorsPage() {
   const load = useCallback(() => {
     setLoading(true)
     setError('')
-    listCustomers({ owing: owingOnly, sort })
+    return listCustomers({ owing: owingOnly, sort })
       .then(setCustomers)
       .catch(() => setError(COPY.CREDITORS_LOAD_ERROR))
       .finally(() => setLoading(false))
@@ -209,7 +209,7 @@ function CustomerDetailModal({
 
   const load = useCallback(() => {
     setLoading(true)
-    fetchCustomer(customerId).then(setDetail).catch(() => setError(COPY.CREDITORS_LOAD_ERROR)).finally(() => setLoading(false))
+    return fetchCustomer(customerId).then(setDetail).catch(() => setError(COPY.CREDITORS_LOAD_ERROR)).finally(() => setLoading(false))
   }, [customerId])
 
   useEffect(() => { load() }, [load])

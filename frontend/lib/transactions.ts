@@ -40,6 +40,15 @@ export async function createSale(payload: SaleCreatePayload): Promise<Transactio
   return data
 }
 
+/** Item D12 — resolves a printed/QR'd reference_number back to the full
+ * transaction, scoped to the caller's business. Throws (404) if not found
+ * or if it belongs to a different business — callers should catch and
+ * show COPY.TXN_SEARCH_RECEIPT_NOT_FOUND rather than the raw error. */
+export async function lookupReceipt(referenceNumber: string): Promise<Transaction> {
+  const { data } = await api.get(`/transactions/receipt/${encodeURIComponent(referenceNumber.trim())}/`)
+  return data
+}
+
 export interface TransactionListParams {
   type?: string
   payment?: string

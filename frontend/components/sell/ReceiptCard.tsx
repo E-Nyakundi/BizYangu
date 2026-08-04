@@ -15,6 +15,7 @@
  */
 
 import type { Business, PaymentMethod, PaymentStatus, Transaction } from '@/lib/types'
+import ReceiptQR from './ReceiptQR'
 
 // ── Labels ───────────────────────────────────────────────────────────────────
 
@@ -30,21 +31,6 @@ const PAYMENT_STATUS: Record<PaymentStatus, { label: string; badge: string }> = 
   PENDING: { label: 'Inasubiri', badge: 'badge-pending' },
   FAILED: { label: 'Imeshindwa', badge: 'badge-failed' },
   DISPUTED: { label: 'Mgogoro', badge: 'badge-violet' },
-}
-
-// ── Decorative barcode ─────────────────────────────────────────────────────
-// Purely visual — bar widths are derived deterministically from the
-// reference number so every receipt gets a distinct-looking "barcode"
-// without pulling in a real barcode library for something nobody scans.
-
-function barcodeWidths(seed: string): number[] {
-  const chars = seed.split('')
-  const widths: number[] = []
-  for (let i = 0; i < 34; i++) {
-    const c = chars[i % chars.length] ?? 'X'
-    widths.push(2 + (c.charCodeAt(0) % 4)) // 2–5px bars
-  }
-  return widths
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -222,19 +208,10 @@ export default function ReceiptCard({
           Asante kwa biashara yako 🙏
         </div>
 
-        {/* decorative barcode — not scannable, purely a receipt cue */}
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 2, height: 30 }}>
-          {barcodeWidths(transaction.reference_number).map((w, i) => (
-            <div
-              key={i}
-              style={{
-                width: w,
-                height: i % 5 === 0 ? 30 : 20,
-                background: 'var(--color-teal-dim)',
-                opacity: i % 3 === 0 ? 0.9 : 0.5,
-              }}
-            />
-          ))}
+        {/* real, scannable QR — item D12. Resolves via
+            GET /transactions/receipt/{reference_number}/ */}
+        <div style={{ marginBottom: 'var(--sp-2)' }}>
+          <ReceiptQR value={transaction.reference_number} />
         </div>
         <div
           className="mono"

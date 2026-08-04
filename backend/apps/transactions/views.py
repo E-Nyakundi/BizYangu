@@ -512,6 +512,53 @@ def transaction_detail(request, transaction_id):
     return Response(TransactionSerializer(txn).data)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsNotExpired])
+def receipt_lookup(request, reference_number):
+    """
+    GET /api/v1/transactions/receipt/{reference_number}/
+
+    Item D12 — the "real, scannable receipt" fix. Resolves a printed/QR'd
+    reference_number (e.g. BY-2026-0042) back to the full transaction.
+
+    Scoped internally: authenticated + business-scoped, same as every
+    other endpoint here. reference_number is only unique *within* a
+    business (see the UniqueConstraint comment in models.py), so this
+    can never leak another business's transaction even if two businesses
+    happen to share a reference_number — the business filter makes that
+    impossible to collide against. This is deliberately not a public,
+    unauthenticated endpoint yet — see the pre-pilot doc's Architecture
+    Principles section (#3) for why: build the internal lookup now,
+    keep it structured so a public-safe view can read from the same
+    source later without a rework, but don't build the public layer
+    before there's an actual public consumer (the future Customer
+    Platform) to justify it.
+    """
+    business, err = get_business_or_404(request)
+    if err:
+        return err
+
+    try:
+        txn = (
+            Transaction.objects.select_related('created_by', 'customer')
+            .prefetch_related('items__product')
+            .annotate(
+                refunded_total=Sum(
+                    'refunds__total_amount',
+                    filter=Q(refunds__is_voided=False),
+                )
+            )
+            .get(business=business, reference_number=reference_number.strip().upper())
+        )
+    except Transaction.DoesNotExist:
+        return Response(
+            {'detail': MESSAGES['RECEIPT_NOT_FOUND']},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    return Response(TransactionSerializer(txn).data)
+
+
 # ── Refund ────────────────────────────────────────────────────────────────────
 
 def _apportion_refund_amount(original, amount):

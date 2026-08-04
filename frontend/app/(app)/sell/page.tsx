@@ -18,6 +18,7 @@ import { enqueue, queueLength, syncQueue } from '@/lib/offline-queue'
 import { fetchBusiness } from '@/lib/business'
 import { shareReceiptImage } from '@/lib/receipt-share'
 import ReceiptCard from '@/components/sell/ReceiptCard'
+import ScannerButton from '@/components/scanner/ScannerButton'
 import type { Product, CartItem, PaymentMethod, Transaction, MpesaWsEvent, Business } from '@/lib/types'
 import { COPY } from '@/lib/copy'
 
@@ -509,6 +510,7 @@ export default function SellPage() {
   const [products, setProducts] = useState<Product[]>([])
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [search, setSearch] = useState('')
+  const [scanError, setScanError] = useState('')
   // null = "All", UNCATEGORIZED sentinel = the no-category bucket,
   // anything else = an exact category_name to filter down to.
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
@@ -640,7 +642,8 @@ export default function SellPage() {
     if (categoryFilter && categoryFilter !== UNCATEGORIZED && p.category_name !== categoryFilter) return false
     return (
       p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.sku.toLowerCase().includes(search.toLowerCase())
+      p.sku.toLowerCase().includes(search.toLowerCase()) ||
+      (p.barcode && p.barcode.toLowerCase().includes(search.toLowerCase()))
     )
   })
 
@@ -659,6 +662,24 @@ export default function SellPage() {
       return [...prev, { product, quantity: 1 }]
     })
   }, [])
+
+  // Item scanner architecture — shared BarcodeScanner, product-barcode
+  // consumer. An exact barcode match adds straight to cart and clears
+  // the search box so the next scan can go immediately, matching how a
+  // real POS scanner gun feels (scan, scan, scan, no taps between).
+  // No match falls back to filtering the list by the scanned text, in
+  // case it's a partial/misread scan the cashier can still pick from.
+  const handleBarcodeScan = useCallback((text: string) => {
+    setScanError('')
+    const match = activeProducts.find((p) => p.barcode && p.barcode === text)
+    if (match) {
+      addToCart(match)
+      setSearch('')
+    } else {
+      setSearch(text)
+      setScanError(COPY.SELL_SCAN_NOT_FOUND)
+    }
+  }, [activeProducts, addToCart])
 
   // Adds a freeform "not in catalog" item (Phase 9, sell-without-inventory).
   // Built as a synthetic client-only Product so the rest of the cart UI
@@ -905,16 +926,28 @@ export default function SellPage() {
         {/* ── Left: Product grid ── */}
         <div className="sell-products-scroll" style={{ flex: 1, overflowY: 'auto', padding: 'var(--sp-4)' }}>
 
-          <input
-            ref={searchRef}
-            className="input"
-            type="search"
-            placeholder={COPY.SELL_SEARCH_FULL_PLACEHOLDER}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{ marginBottom: 'var(--sp-3)', width: '100%' }}
-            autoFocus
-          />
+          <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: scanError ? 'var(--sp-1)' : 'var(--sp-3)' }}>
+            <input
+              ref={searchRef}
+              className="input"
+              type="search"
+              placeholder={COPY.SELL_SEARCH_FULL_PLACEHOLDER}
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setScanError('') }}
+              style={{ flex: 1 }}
+              autoFocus
+            />
+            <ScannerButton
+              title={COPY.SCANNER_PRODUCT_TITLE}
+              hint={COPY.SCANNER_HINT}
+              onDetected={handleBarcodeScan}
+            />
+          </div>
+          {scanError && (
+            <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-error)', marginBottom: 'var(--sp-3)' }}>
+              {scanError}
+            </p>
+          )}
 
           {showCategoryChips && (
             <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-3)', overflowX: 'auto', paddingBottom: 2 }}>

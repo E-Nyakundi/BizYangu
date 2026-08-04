@@ -83,6 +83,7 @@ MESSAGES = {
 
     # Transactions
     'TRANSACTION_NOT_FOUND': 'Transaction not found.',
+    'RECEIPT_NOT_FOUND': "No receipt found with that number. Check it's typed correctly.",
     'TRANSACTION_VOIDED': 'Transaction voided successfully.',
     'TRANSACTION_ALREADY_VOIDED': 'This transaction has already been voided.',
     'REFUND_ORIGINAL_NOT_SALE': 'Only a SALE transaction can be refunded.',
@@ -229,6 +230,7 @@ MESSAGES_SW = {
 
     # Transactions
     'TRANSACTION_NOT_FOUND': 'Miamala haikusumatwa.',
+    'RECEIPT_NOT_FOUND': 'Hakuna risiti yenye nambari hiyo. Hakiki umeandika sahihi.',
     'TRANSACTION_VOIDED': 'Miamala imebatilishwa.',
     'TRANSACTION_ALREADY_VOIDED': 'Muamala huu tayari umefutwa.',
     'REFUND_ORIGINAL_NOT_SALE': 'Ni muamala wa aina SALE tu unaoweza kurudishiwa.',

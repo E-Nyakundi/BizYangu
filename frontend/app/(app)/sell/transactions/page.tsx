@@ -9,10 +9,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/auth'
-import { listTransactions, voidTransaction, refundTransaction } from '@/lib/transactions'
+import { listTransactions, voidTransaction, refundTransaction, lookupReceipt } from '@/lib/transactions'
 import { fetchBusiness } from '@/lib/business'
 import { shareReceiptImage } from '@/lib/receipt-share'
 import ReceiptCard from '@/components/sell/ReceiptCard'
+import ScannerButton from '@/components/scanner/ScannerButton'
 import type { Transaction, Business } from '@/lib/types'
 import { COPY } from '@/lib/copy'
 
@@ -414,6 +415,29 @@ export default function TransactionsPage() {
   const [receiptTarget, setReceiptTarget] = useState<Transaction | null>(null)
   const [business, setBusiness] = useState<Business | null>(null)
 
+  // Item D12 — search-by-serial. Sits alongside the date/type filters
+  // but hits a dedicated lookup rather than the paginated list endpoint,
+  // since a receipt number is an exact match, not a filter.
+  const [receiptQuery, setReceiptQuery] = useState('')
+  const [receiptSearching, setReceiptSearching] = useState(false)
+  const [receiptSearchError, setReceiptSearchError] = useState('')
+
+  async function handleReceiptSearch(override?: string) {
+    const query = (override ?? receiptQuery).trim()
+    if (!query) return
+    setReceiptSearching(true)
+    setReceiptSearchError('')
+    try {
+      const txn = await lookupReceipt(query)
+      setReceiptTarget(txn) // reuses the existing ReceiptModal
+      setReceiptQuery('')
+    } catch {
+      setReceiptSearchError(COPY.TXN_SEARCH_RECEIPT_NOT_FOUND)
+    } finally {
+      setReceiptSearching(false)
+    }
+  }
+
   useEffect(() => {
     fetchBusiness().then(setBusiness).catch(() => {})
   }, [])
@@ -479,6 +503,35 @@ export default function TransactionsPage() {
       </header>
 
       <main style={{ maxWidth: 720, margin: '0 auto', padding: 'var(--sp-5) var(--sp-4)' }}>
+
+        {/* Receipt search — item D12 */}
+        <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-3)' }}>
+          <input
+            className="input mono"
+            type="text"
+            placeholder={COPY.TXN_SEARCH_RECEIPT_PLACEHOLDER}
+            value={receiptQuery}
+            onChange={(e) => { setReceiptQuery(e.target.value.toUpperCase()); setReceiptSearchError('') }}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleReceiptSearch() }}
+            style={{ flex: 1, letterSpacing: '0.03em' }}
+          />
+          <button
+            className="btn-secondary"
+            onClick={() => handleReceiptSearch()}
+            disabled={receiptSearching || !receiptQuery.trim()}
+          >
+            {receiptSearching ? COPY.TXN_SEARCH_RECEIPT_SEARCHING : COPY.TXN_SEARCH_RECEIPT_BTN}
+          </button>
+          <ScannerButton
+            title={COPY.SCANNER_RECEIPT_TITLE}
+            onDetected={(text) => handleReceiptSearch(text)}
+          />
+        </div>
+        {receiptSearchError && (
+          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-error)', marginTop: -8, marginBottom: 'var(--sp-3)' }}>
+            {receiptSearchError}
+          </p>
+        )}
 
         {/* Filters */}
         <div style={{ display: 'flex', gap: 'var(--sp-3)', marginBottom: 'var(--sp-5)', flexWrap: 'wrap' }}>

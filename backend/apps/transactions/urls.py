@@ -10,6 +10,11 @@ urlpatterns = [
     path('refund/', views.create_refund, name='transaction-refund'),
     path('unreconciled/', views.unreconciled_list, name='transaction-unreconciled-list'),
     path('unreconciled/resolve/', views.unreconciled_resolve, name='transaction-unreconciled-resolve'),
+    # Item D12 — receipt serial lookup. Reuses reference_number (already
+    # generated at sale time, already unique per business) rather than a
+    # new field; scoped internally for pilot per the architecture note in
+    # the pre-pilot doc — see receipt_lookup() for why.
+    path('receipt/<str:reference_number>/', views.receipt_lookup, name='transaction-receipt-lookup'),
     path('<uuid:transaction_id>/', views.transaction_detail, name='transaction-detail'),
     path('<uuid:transaction_id>/void/', views.void_transaction, name='transaction-void'),
 ]
