@@ -10,10 +10,10 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/auth'
 import { listTransactions, voidTransaction, refundTransaction, lookupReceipt } from '@/lib/transactions'
+import { apiErrorMessage } from '@/lib/api'
 import { fetchBusiness } from '@/lib/business'
 import { shareReceiptImage } from '@/lib/receipt-share'
 import ReceiptCard from '@/components/sell/ReceiptCard'
-import ScannerButton from '@/components/scanner/ScannerButton'
 import type { Transaction, Business } from '@/lib/types'
 import { COPY } from '@/lib/copy'
 
@@ -396,6 +396,79 @@ function ReceiptModal({
   )
 }
 
+// ── Receipt lookup (item D12 — search-by-serial) ────────────────────────────
+// Pilot-scoped fallback per the pre-pilot doc: no camera/QR-scanner plugin
+// exists in the app yet, so this is a plain text box against the same
+// receipt_lookup endpoint a future scanner would call. Swapping in camera
+// input later just needs to call onFound with the decoded string instead
+// of the input value — this component's shape doesn't need to change.
+
+function ReceiptLookupBox({ onFound }: { onFound: (txn: Transaction) => void }) {
+  const [open, setOpen] = useState(false)
+  const [value, setValue] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleLookup() {
+    const trimmed = value.trim()
+    if (!trimmed) { setError(COPY.TXN_LOOKUP_EMPTY_INPUT); return }
+    setLoading(true)
+    setError('')
+    try {
+      const txn = await lookupReceipt(trimmed)
+      onFound(txn)
+      setValue('')
+      setOpen(false)
+    } catch (err: unknown) {
+      // Backend already returns the exact "no receipt found" copy as
+      // `detail` on a 404 (see MESSAGES.RECEIPT_NOT_FOUND) — apiErrorMessage
+      // surfaces that directly, same pattern as creditors/payments pages.
+      setError(apiErrorMessage(err, COPY.TXN_LOOKUP_ERROR))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        className="btn-ghost"
+        onClick={() => setOpen(true)}
+        style={{ fontSize: 'var(--fs-xs)', marginBottom: 'var(--sp-4)' }}
+      >
+        {COPY.TXN_LOOKUP_TOGGLE}
+      </button>
+    )
+  }
+
+  return (
+    <div style={{ marginBottom: 'var(--sp-5)' }}>
+      <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+        <input
+          className="input"
+          placeholder={COPY.TXN_LOOKUP_PLACEHOLDER}
+          value={value}
+          onChange={(e) => { setValue(e.target.value); setError('') }}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleLookup() }}
+          autoFocus
+          style={{ flex: 1 }}
+        />
+        <button className="btn-primary" onClick={handleLookup} disabled={loading} style={{ fontSize: 'var(--fs-xs)', whiteSpace: 'nowrap' }}>
+          {loading ? COPY.TXN_LOOKUP_SEARCHING : COPY.TXN_LOOKUP_BTN}
+        </button>
+        <button className="btn-ghost" onClick={() => { setOpen(false); setError(''); setValue('') }} style={{ fontSize: 'var(--fs-xs)' }}>
+          {COPY.TXN_CLOSE}
+        </button>
+      </div>
+      {error && (
+        <div style={{ color: 'var(--color-error)', fontSize: 'var(--fs-xs)', marginTop: 'var(--sp-2)' }}>
+          {error}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function TransactionsPage() {
@@ -414,29 +487,6 @@ export default function TransactionsPage() {
   const [refundTarget, setRefundTarget] = useState<Transaction | null>(null)
   const [receiptTarget, setReceiptTarget] = useState<Transaction | null>(null)
   const [business, setBusiness] = useState<Business | null>(null)
-
-  // Item D12 — search-by-serial. Sits alongside the date/type filters
-  // but hits a dedicated lookup rather than the paginated list endpoint,
-  // since a receipt number is an exact match, not a filter.
-  const [receiptQuery, setReceiptQuery] = useState('')
-  const [receiptSearching, setReceiptSearching] = useState(false)
-  const [receiptSearchError, setReceiptSearchError] = useState('')
-
-  async function handleReceiptSearch(override?: string) {
-    const query = (override ?? receiptQuery).trim()
-    if (!query) return
-    setReceiptSearching(true)
-    setReceiptSearchError('')
-    try {
-      const txn = await lookupReceipt(query)
-      setReceiptTarget(txn) // reuses the existing ReceiptModal
-      setReceiptQuery('')
-    } catch {
-      setReceiptSearchError(COPY.TXN_SEARCH_RECEIPT_NOT_FOUND)
-    } finally {
-      setReceiptSearching(false)
-    }
-  }
 
   useEffect(() => {
     fetchBusiness().then(setBusiness).catch(() => {})
@@ -504,34 +554,8 @@ export default function TransactionsPage() {
 
       <main style={{ maxWidth: 720, margin: '0 auto', padding: 'var(--sp-5) var(--sp-4)' }}>
 
-        {/* Receipt search — item D12 */}
-        <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-3)' }}>
-          <input
-            className="input mono"
-            type="text"
-            placeholder={COPY.TXN_SEARCH_RECEIPT_PLACEHOLDER}
-            value={receiptQuery}
-            onChange={(e) => { setReceiptQuery(e.target.value.toUpperCase()); setReceiptSearchError('') }}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleReceiptSearch() }}
-            style={{ flex: 1, letterSpacing: '0.03em' }}
-          />
-          <button
-            className="btn-secondary"
-            onClick={() => handleReceiptSearch()}
-            disabled={receiptSearching || !receiptQuery.trim()}
-          >
-            {receiptSearching ? COPY.TXN_SEARCH_RECEIPT_SEARCHING : COPY.TXN_SEARCH_RECEIPT_BTN}
-          </button>
-          <ScannerButton
-            title={COPY.SCANNER_RECEIPT_TITLE}
-            onDetected={(text) => handleReceiptSearch(text)}
-          />
-        </div>
-        {receiptSearchError && (
-          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-error)', marginTop: -8, marginBottom: 'var(--sp-3)' }}>
-            {receiptSearchError}
-          </p>
-        )}
+        {/* Receipt lookup — item D12 */}
+        <ReceiptLookupBox onFound={setReceiptTarget} />
 
         {/* Filters */}
         <div style={{ display: 'flex', gap: 'var(--sp-3)', marginBottom: 'var(--sp-5)', flexWrap: 'wrap' }}>

@@ -20,32 +20,10 @@ export interface SaleCreatePayload {
   payment_method: PaymentMethod
   mpesa_reference?: string
   notes?: string
-  // Split-payment breakdown — only read by the backend when
-  // payment_method is MIXED; ignored otherwise.
-  cash_amount?: string
-  mpesa_amount?: string
-  credit_amount?: string
-  // Credit-portion customer capture — required by the backend whenever
-  // the resolved credit amount is > 0 (payment_method CREDIT, or MIXED
-  // with a non-zero credit_amount). Pass customer_id to bill an existing
-  // customer, or customer_name (+ optional customer_phone) to
-  // get-or-create one inline.
-  customer_id?: string
-  customer_name?: string
-  customer_phone?: string
 }
 
 export async function createSale(payload: SaleCreatePayload): Promise<Transaction> {
   const { data } = await api.post('/transactions/sale/', payload)
-  return data
-}
-
-/** Item D12 — resolves a printed/QR'd reference_number back to the full
- * transaction, scoped to the caller's business. Throws (404) if not found
- * or if it belongs to a different business — callers should catch and
- * show COPY.TXN_SEARCH_RECEIPT_NOT_FOUND rather than the raw error. */
-export async function lookupReceipt(referenceNumber: string): Promise<Transaction> {
-  const { data } = await api.get(`/transactions/receipt/${encodeURIComponent(referenceNumber.trim())}/`)
   return data
 }
 
@@ -70,6 +48,18 @@ export async function listTransactions(params: TransactionListParams = {}): Prom
 
 export async function fetchTransaction(id: string): Promise<Transaction> {
   const { data } = await api.get(`/transactions/${id}/`)
+  return data
+}
+
+/**
+ * Item D12 — resolves a printed/QR'd reference_number (e.g. BY-2026-0042)
+ * back to the full transaction, via GET /transactions/receipt/{ref}/.
+ * Business-scoped + authenticated on the backend (see receipt_lookup() in
+ * apps/transactions/views.py) — this is the pilot's "search-by-serial"
+ * fallback, not a public/unauthenticated lookup.
+ */
+export async function lookupReceipt(referenceNumber: string): Promise<Transaction> {
+  const { data } = await api.get(`/transactions/receipt/${encodeURIComponent(referenceNumber.trim())}/`)
   return data
 }
 

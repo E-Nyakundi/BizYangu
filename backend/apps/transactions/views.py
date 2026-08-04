@@ -715,12 +715,18 @@ def create_refund(request):
                     created_by=request.user,
                 )
 
+        # Built inside the atomic block so a future missing MESSAGES key or
+        # serializer error rolls the refund back instead of committing it
+        # silently behind a 500 — same fix applied to settle_payment()
+        # after that exact failure mode hit production (see its comment).
+        response_payload = {
+            'detail': MESSAGES['REFUND_PROCESSED'],
+            'transaction': TransactionSerializer(refund_txn).data,
+        }
+
     notify_dashboard(business.id, 'refund')
 
-    return Response(
-        {'detail': MESSAGES['REFUND_PROCESSED'], 'transaction': TransactionSerializer(refund_txn).data},
-        status=status.HTTP_201_CREATED,
-    )
+    return Response(response_payload, status=status.HTTP_201_CREATED)
 
 
 # ── Void ──────────────────────────────────────────────────────────────────────
@@ -782,12 +788,18 @@ def void_transaction(request, transaction_id):
                         created_by=request.user,
                     )
 
+        # Same fix as settle_payment() and create_refund() — built inside
+        # the atomic block so a future missing MESSAGES key or serializer
+        # error rolls the void back instead of committing it silently
+        # behind a 500.
+        response_payload = {
+            'detail': MESSAGES['TRANSACTION_VOIDED'],
+            'transaction': TransactionSerializer(txn).data,
+        }
+
     notify_dashboard(business.id, 'void')
 
-    return Response(
-        {'detail': MESSAGES['TRANSACTION_VOIDED'], 'transaction': TransactionSerializer(txn).data},
-        status=status.HTTP_200_OK,
-    )
+    return Response(response_payload, status=status.HTTP_200_OK)
 
 
 # ── Reconciliation queue (Phase 9.2, minimal — pilot-path plan Phase 2) ────────

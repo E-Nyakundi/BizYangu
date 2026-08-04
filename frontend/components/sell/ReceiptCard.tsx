@@ -7,15 +7,23 @@
  * be re-shown, e.g. transaction history.
  *
  * Design language: LN Design System v5 tokens only (no new colors/fonts).
- * Paper-slip cues (perforated top/bottom edge, dashed section rules, a
- * decorative barcode derived from the reference number) rendered in the
- * app's existing dark surface + teal-accent + JetBrains Mono vocabulary,
- * rather than a literal white paper receipt — it should look like it
- * belongs in BizYangu, not like a scanned till slip.
+ * Paper-slip cues (perforated top/bottom edge, dashed section rules) and a
+ * real, scannable QR code (item D12) rendered in the app's existing dark
+ * surface + teal-accent + JetBrains Mono vocabulary, rather than a literal
+ * white paper receipt — it should look like it belongs in BizYangu, not
+ * like a scanned till slip.
+ *
+ * The QR encodes reference_number as plain text (e.g. "BY-2026-0042"), not
+ * a URL — there's no public receipt page for pilot (see Architecture Note
+ * on item D12 in the pre-pilot doc). Scanning it just gets you the same
+ * string you'd type into the Transactions search-by-serial box; the
+ * lookup itself (GET /transactions/receipt/{ref}/) is authenticated and
+ * business-scoped, so the QR alone doesn't grant access to anything.
  */
 
+import { useEffect, useState } from 'react'
+import QRCode from 'qrcode'
 import type { Business, PaymentMethod, PaymentStatus, Transaction } from '@/lib/types'
-import ReceiptQR from './ReceiptQR'
 
 // ── Labels ───────────────────────────────────────────────────────────────────
 
@@ -51,6 +59,26 @@ export default function ReceiptCard({
     dateStyle: 'medium',
     timeStyle: 'short',
   })
+
+  // Real, scannable QR (item D12) — generated client-side as a PNG data
+  // URL so html2canvas (lib/receipt-share.ts) captures it the same as any
+  // other <img>, unlike an inline <svg> which some capture paths handle
+  // inconsistently. White backing square regardless of theme — QR
+  // scanners rely on the light/dark module contrast and a phone camera
+  // may be reading this off-screen (printed) or on a low-brightness
+  // display, so it shouldn't inherit the card's dark surface color.
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    QRCode.toDataURL(transaction.reference_number, {
+      margin: 1,
+      width: 176,
+      color: { dark: '#0B0F0E', light: '#FFFFFF' },
+    })
+      .then((url) => { if (!cancelled) setQrDataUrl(url) })
+      .catch(() => { if (!cancelled) setQrDataUrl(null) })
+    return () => { cancelled = true }
+  }, [transaction.reference_number])
 
   return (
     <div
@@ -208,10 +236,21 @@ export default function ReceiptCard({
           Asante kwa biashara yako 🙏
         </div>
 
-        {/* real, scannable QR — item D12. Resolves via
-            GET /transactions/receipt/{reference_number}/ */}
-        <div style={{ marginBottom: 'var(--sp-2)' }}>
-          <ReceiptQR value={transaction.reference_number} />
+        {/* real, scannable QR — item D12 */}
+        <div
+          style={{
+            display: 'inline-flex',
+            background: '#FFFFFF',
+            borderRadius: 'var(--radius-subtle)',
+            padding: 8,
+            lineHeight: 0,
+          }}
+        >
+          {qrDataUrl ? (
+            <img src={qrDataUrl} alt={transaction.reference_number} width={88} height={88} />
+          ) : (
+            <div style={{ width: 88, height: 88 }} />
+          )}
         </div>
         <div
           className="mono"

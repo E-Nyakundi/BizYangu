@@ -148,14 +148,25 @@ def settle_payment(request, customer_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # The response payload (including the MESSAGES[] lookup and the
+    # serializer call) is built INSIDE the atomic block on purpose. This
+    # was the exact cause of a real incident: MESSAGES['SETTLEMENT_RECORDED']
+    # didn't exist, so this raised a KeyError *after* the payment had
+    # already committed, on an earlier version of this file — the payment
+    # was silently created every time, but the caller only ever saw a 500
+    # and never knew it had worked. Building the payload here means any
+    # future exception in this block (a missing key, a serializer bug,
+    # whatever) rolls the payment back with it — a real failure now looks
+    # like a real failure, not a phantom success.
     with db_transaction.atomic():
         payment = CustomerPayment.objects.create(
             business=business, customer=customer, amount=amount,
             notes=notes, created_by=request.user,
         )
+        response_payload = {
+            'detail': MESSAGES['SETTLEMENT_RECORDED'],
+            'payment': CustomerPaymentSerializer(payment).data,
+            'remaining_balance': str(customer_balance(customer)),
+        }
 
-    return Response({
-        'detail': MESSAGES['SETTLEMENT_RECORDED'],
-        'payment': CustomerPaymentSerializer(payment).data,
-        'remaining_balance': str(customer_balance(customer)),
-    })
+    return Response(response_payload)
