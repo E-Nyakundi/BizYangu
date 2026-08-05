@@ -15,7 +15,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from apps.accounts.permissions import IsNotExpired, IsOwnerOrManager, IsOwner
-from apps.catalog.models import Product
+from apps.catalog.models import Product, ProductUnit
 from apps.catalog.serializers import ProductCreateSerializer, ProductSerializer
 from apps.core.messages import MESSAGES
 from apps.inventory.models import StockMovement
@@ -89,6 +89,61 @@ def create_sale(request):
     for item_data in data['items']:
         qty = item_data['quantity']
 
+        if item_data.get('product_unit_id'):
+            # Sale against one specific sellable form of a product (C10) —
+            # a stick rather than the pack, a gorogoro rather than the bag.
+            # product is derived from the unit itself; there's no separate
+            # product_id on this shape (validated in the serializer).
+            try:
+                unit = ProductUnit.objects.select_related('product', 'parent').get(
+                    id=item_data['product_unit_id'],
+                    product__business=business,
+                    product__is_active=True,
+                )
+            except ProductUnit.DoesNotExist:
+                return Response(
+                    {'detail': MESSAGES['PRODUCT_UNIT_NOT_FOUND']},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if not unit.is_sellable:
+                return Response(
+                    {'detail': MESSAGES['PRODUCT_UNIT_NOT_SELLABLE']},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if unit.selling_price is None:
+                return Response(
+                    {'detail': MESSAGES['PRODUCT_UNIT_NO_SELLING_PRICE'].format(unit=unit.get_unit_display())},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            available = unit.available_quantity()
+            if available < qty:
+                return Response(
+                    {
+                        'detail': MESSAGES['PRODUCT_UNIT_INSUFFICIENT_STOCK'].format(
+                            name=unit.product.name, unit=unit.get_unit_display(),
+                            remaining=available, requested=qty,
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            subtotal = qty * unit.selling_price
+            total += subtotal
+            line_items.append({
+                'product': unit.product,
+                'product_unit': unit,
+                'name': '',
+                'is_reconciled': True,
+                'quantity': qty,
+                'unit_price': unit.selling_price,
+                'cost_price': unit.product.cost_price,
+                'subtotal': subtotal,
+            })
+            continue
+
         if not item_data.get('product_id'):
             # Not-in-catalog item: no Product to resolve, no stock to check,
             # no StockMovement to create — it's just a name + price the
@@ -97,6 +152,7 @@ def create_sale(request):
             total += subtotal
             line_items.append({
                 'product': None,
+                'product_unit': None,
                 'name': item_data['name'],
                 'is_reconciled': False,
                 'quantity': qty,
@@ -132,6 +188,7 @@ def create_sale(request):
         total += subtotal
         line_items.append({
             'product': product,
+            'product_unit': None,
             'name': '',
             'is_reconciled': True,
             'quantity': qty,
@@ -224,6 +281,7 @@ def create_sale(request):
             TransactionItem.objects.create(
                 transaction=txn,
                 product=li['product'],
+                product_unit=li.get('product_unit'),
                 name=li['name'],
                 is_reconciled=li['is_reconciled'],
                 quantity=li['quantity'],
@@ -236,7 +294,31 @@ def create_sale(request):
             # So we handle stock + movement manually here for correctness.
             # li['product'] is None for not-in-catalog items — nothing to
             # deduct or track for those, skip straight past.
-            if li['product'] and li['product'].track_stock:
+            if li.get('product_unit'):
+                # C10 sale-flow integration: deduct from whichever ancestor
+                # in the unit tree actually holds the counter for this
+                # pool (see ProductUnit.deduct_sale), not Product.current_stock
+                # — that's a separate pool this branch never touches. No
+                # low-stock notification here either: it's keyed off
+                # Product.current_stock/low_stock_threshold, neither of
+                # which changed for this line.
+                unit = li['product_unit']
+                counted_node, _ratio = unit._walk_to_counted_ancestor()
+                qty_before = counted_node.stock_quantity
+                unit.deduct_sale(li['quantity'])
+                counted_node.refresh_from_db(fields=['stock_quantity'])
+                StockMovement.objects.create(
+                    business=business,
+                    product=li['product'],
+                    product_unit=unit,
+                    transaction=txn,
+                    movement_type=StockMovement.MovementType.SALE,
+                    quantity_change=counted_node.stock_quantity - qty_before,
+                    quantity_before=qty_before,
+                    quantity_after=counted_node.stock_quantity,
+                    created_by=request.user,
+                )
+            elif li['product'] and li['product'].track_stock:
                 qty_before = li['product'].current_stock
                 status_before = li['product'].stock_status
                 qty_after = qty_before - li['quantity']
@@ -637,7 +719,7 @@ def create_refund(request):
     data = serializer.validated_data
 
     try:
-        original = Transaction.objects.prefetch_related('items__product').get(
+        original = Transaction.objects.prefetch_related('items__product', 'items__product_unit').get(
             id=data['transaction_id'], business=business,
         )
     except Transaction.DoesNotExist:
@@ -686,6 +768,7 @@ def create_refund(request):
             TransactionItem.objects.create(
                 transaction=refund_txn,
                 product=original_item.product,
+                product_unit=original_item.product_unit,
                 name=original_item.name,
                 is_reconciled=original_item.is_reconciled,
                 quantity=line['quantity'],
@@ -699,7 +782,29 @@ def create_refund(request):
             # not-in-catalog sale line — nothing was deducted at sale time,
             # so there's no stock to restore here either.
             product = original_item.product
-            if product and product.track_stock:
+            if original_item.product_unit_id:
+                # C10: the sale deducted from the unit tree's own pool
+                # (ProductUnit.deduct_sale), not Product.current_stock —
+                # restore that same pool via ProductUnit.restore_sale, not
+                # the branch below.
+                unit = original_item.product_unit
+                counted_node, _ratio = unit._walk_to_counted_ancestor()
+                qty_before = counted_node.stock_quantity
+                unit.restore_sale(line['quantity'])
+                counted_node.refresh_from_db(fields=['stock_quantity'])
+                StockMovement.objects.create(
+                    business=business,
+                    product=product,
+                    product_unit=unit,
+                    transaction=refund_txn,
+                    movement_type=StockMovement.MovementType.REFUND,
+                    quantity_change=counted_node.stock_quantity - qty_before,
+                    quantity_before=qty_before,
+                    quantity_after=counted_node.stock_quantity,
+                    notes=MESSAGES['STOCK_MOVEMENT_REFUND_NOTE'].format(reference=original.reference_number),
+                    created_by=request.user,
+                )
+            elif product and product.track_stock:
                 qty_before = product.current_stock
                 product.current_stock += line['quantity']
                 product.save(update_fields=['current_stock'])
@@ -743,7 +848,7 @@ def void_transaction(request, transaction_id):
         return err
 
     try:
-        txn = Transaction.objects.prefetch_related('items__product').get(
+        txn = Transaction.objects.prefetch_related('items__product', 'items__product_unit').get(
             id=transaction_id, business=business
         )
     except Transaction.DoesNotExist:
@@ -772,7 +877,29 @@ def void_transaction(request, transaction_id):
             for item in txn.items.all():
                 # item.product is None for not-in-catalog items — nothing
                 # was deducted for those at sale time, so nothing to restore.
-                if item.product and item.product.track_stock:
+                if item.product_unit_id:
+                    # C10: this line was sold against a specific sellable
+                    # form, so the sale deducted from the unit tree's own
+                    # pool, not Product.current_stock — restore that same
+                    # pool via ProductUnit.restore_sale instead.
+                    unit = item.product_unit
+                    counted_node, _ratio = unit._walk_to_counted_ancestor()
+                    qty_before = counted_node.stock_quantity
+                    unit.restore_sale(item.quantity)
+                    counted_node.refresh_from_db(fields=['stock_quantity'])
+                    StockMovement.objects.create(
+                        business=business,
+                        product=item.product,
+                        product_unit=unit,
+                        transaction=txn,
+                        movement_type=StockMovement.MovementType.REFUND,
+                        quantity_change=counted_node.stock_quantity - qty_before,
+                        quantity_before=qty_before,
+                        quantity_after=counted_node.stock_quantity,
+                        notes=MESSAGES['STOCK_MOVEMENT_REFUND_NOTE'].format(reference=txn.reference_number),
+                        created_by=request.user,
+                    )
+                elif item.product and item.product.track_stock:
                     qty_before = item.product.current_stock
                     item.product.current_stock += item.quantity
                     item.product.save(update_fields=['current_stock'])

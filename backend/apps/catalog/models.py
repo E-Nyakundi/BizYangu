@@ -300,3 +300,19 @@ class ProductUnit(models.Model):
         else:
             counted_node.stock_quantity -= (quantity / ratio)
         counted_node.save(update_fields=['stock_quantity', 'updated_at'])
+
+    def restore_sale(self, quantity):
+        """
+        Reverses deduct_sale — adds `quantity` of this unit back to
+        whichever ancestor holds the counter for this pool. Used when
+        voiding or refunding a sale that was rung up against this
+        specific sellable form (transactions/views.py void_transaction
+        and create_refund), mirroring deduct_sale exactly so the same
+        pool that was decremented at sale time is the one restored.
+        """
+        counted_node, ratio = self._walk_to_counted_ancestor()
+        if counted_node is self:
+            counted_node.stock_quantity += quantity
+        else:
+            counted_node.stock_quantity += (quantity / ratio)
+        counted_node.save(update_fields=['stock_quantity', 'updated_at'])

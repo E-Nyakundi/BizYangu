@@ -188,6 +188,11 @@ MESSAGES = {
     'STOCK_MOVEMENT_REPACKAGE_OUT_NOTE': 'Repackaged into {to_unit}',
     'STOCK_MOVEMENT_REPACKAGE_IN_NOTE': 'Repackaged from {from_unit}',
 
+    # Pack-to-unit selling — sale-flow integration (C10, sell config)
+    'PRODUCT_UNIT_NOT_SELLABLE': 'This form is not available for sale.',
+    'PRODUCT_UNIT_NO_SELLING_PRICE': "No selling price set for '{unit}' — add one on the product's units first.",
+    'PRODUCT_UNIT_INSUFFICIENT_STOCK': "Not enough '{unit}' of '{name}' in stock. Remaining: {remaining}, requested: {requested}.",
+
     # Generic
     'SUCCESS': 'Operation completed successfully.',
     'ERROR': 'An error occurred. Please try again.',
@@ -363,6 +368,11 @@ MESSAGES_SW = {
     'REPACKAGE_RECORDED': 'Ufungashaji upya umerekodiwa.',
     'STOCK_MOVEMENT_REPACKAGE_OUT_NOTE': 'Imefungashwa upya kuwa {to_unit}',
     'STOCK_MOVEMENT_REPACKAGE_IN_NOTE': 'Imefungashwa upya kutoka {from_unit}',
+
+    # Pack-to-unit selling — sale-flow integration (C10, sell config)
+    'PRODUCT_UNIT_NOT_SELLABLE': 'Aina hii haipatikani kwa kuuza.',
+    'PRODUCT_UNIT_NO_SELLING_PRICE': "Hakuna bei ya kuuza iliyowekwa kwa '{unit}' — weka bei kwenye aina za bidhaa kwanza.",
+    'PRODUCT_UNIT_INSUFFICIENT_STOCK': "Hisa ya '{unit}' ya '{name}' haitoshi. Iliyobaki: {remaining}, Ulioomba: {requested}.",
 
     # Generic
     'SUCCESS': 'Kitendo kimefaulu.',

@@ -17,15 +17,23 @@ class TransactionItemCreateSerializer(serializers.Serializer):
     """
     Single line item in a sale. Nested inside SaleCreateSerializer.
 
-    Two shapes are accepted:
-      - catalog item:      { product_id, quantity }
-      - not-in-catalog:    { name, unit_price, quantity }   (no product_id)
+    Three shapes are accepted:
+      - catalog item:        { product_id, quantity }
+      - specific sellable
+        form (C10):           { product_unit_id, quantity }
+      - not-in-catalog:      { name, unit_price, quantity }   (no product_id)
 
-    This mirrors the frontend's addCustomToCart / handleConfirmSale split
-    in sell/page.tsx — a custom item has no real Product to reference, so
-    it carries its own name + price instead of a product_id.
+    product_unit_id rings up a sale against one specific sellable form
+    of a product (a stick rather than the pack, a gorogoro rather than
+    the bag) — see apps.catalog.models.ProductUnit. The product itself
+    is derived from the unit in the view, so product_id is never sent
+    alongside it. This mirrors the frontend's addCustomToCart /
+    handleConfirmSale split in sell/page.tsx — a custom item has no
+    real Product to reference, so it carries its own name + price
+    instead of a product_id.
     """
     product_id = serializers.UUIDField(required=False)
+    product_unit_id = serializers.UUIDField(required=False)
     name = serializers.CharField(max_length=200, required=False, allow_blank=False)
     unit_price = serializers.DecimalField(
         max_digits=12, decimal_places=2, required=False, min_value=Decimal('0.00')
@@ -34,14 +42,18 @@ class TransactionItemCreateSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         has_product = bool(attrs.get('product_id'))
+        has_unit = bool(attrs.get('product_unit_id'))
         has_custom = bool(attrs.get('name')) and attrs.get('unit_price') is not None
-        if not has_product and not has_custom:
+        provided = sum([has_product, has_unit, has_custom])
+        if provided == 0:
             raise serializers.ValidationError(
-                'Each item needs either product_id, or both name and unit_price for a not-in-catalog item.'
+                'Each item needs product_id, product_unit_id, or both name and '
+                'unit_price for a not-in-catalog item.'
             )
-        if has_product and has_custom:
+        if provided > 1:
             raise serializers.ValidationError(
-                'Item cannot have both product_id and name/unit_price — pick one.'
+                'Item cannot combine product_id, product_unit_id, and name/unit_price '
+                '— pick exactly one.'
             )
         return attrs
 
@@ -109,6 +121,10 @@ class TransactionItemSerializer(serializers.ModelSerializer):
     # raise on a None product instead of just returning null.
     product_name = serializers.SerializerMethodField()
     product_sku = serializers.SerializerMethodField()
+    # Which specific sellable form was sold (C10) — null for a plain
+    # product-level sale or a not-in-catalog item. Lets the frontend show
+    # "5 sticks" on a receipt instead of just the parent product's name.
+    unit_label = serializers.SerializerMethodField()
 
     def get_product_name(self, obj):
         return obj.product.name if obj.product_id else obj.name
@@ -116,11 +132,14 @@ class TransactionItemSerializer(serializers.ModelSerializer):
     def get_product_sku(self, obj):
         return obj.product.sku if obj.product_id else None
 
+    def get_unit_label(self, obj):
+        return obj.product_unit.get_unit_display() if obj.product_unit_id else None
+
     class Meta:
         model = TransactionItem
-        fields = ['id', 'product', 'product_name', 'product_sku',
+        fields = ['id', 'product', 'product_name', 'product_sku', 'product_unit', 'unit_label',
                   'quantity', 'unit_price', 'cost_price', 'subtotal', 'original_item']
-        read_only_fields = ['id', 'product_name', 'product_sku', 'subtotal', 'original_item']
+        read_only_fields = ['id', 'product_name', 'product_sku', 'unit_label', 'subtotal', 'original_item']
 
 
 class TransactionSerializer(serializers.ModelSerializer):

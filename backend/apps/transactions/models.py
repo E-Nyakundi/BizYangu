@@ -158,6 +158,21 @@ class TransactionItem(models.Model):
         'catalog.Product', on_delete=models.SET_NULL, related_name='transaction_items',
         null=True, blank=True,
     )
+    # Pack-to-unit selling (C10, sale-flow integration). Set only when this
+    # line was rung up against a specific sellable form of `product` (a
+    # stick rather than the pack, a gorogoro rather than the bag) rather
+    # than the plain product itself. Null for every other kind of line —
+    # ordinary catalog sales without a unit tree, not-in-catalog items,
+    # stock-in, and adjustments — so this is purely additive and doesn't
+    # change behaviour for products that never set up a ProductUnit tree.
+    # SET_NULL (not CASCADE/PROTECT): deleting a ProductUnit later must
+    # never delete or block deletion of historical sale records — the
+    # line item's own quantity/unit_price/subtotal already fully capture
+    # what was sold regardless of whether the specific form still exists.
+    product_unit = models.ForeignKey(
+        'catalog.ProductUnit', on_delete=models.SET_NULL, related_name='transaction_items',
+        null=True, blank=True,
+    )
     # Set only when product is None — the freeform name the cashier typed
     # for a not-in-catalog item. Ignored/blank for normal catalog sales,
     # where product.name is the source of truth.
