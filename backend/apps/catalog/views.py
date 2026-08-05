@@ -5,6 +5,7 @@ All scoped to the authenticated user's business.
 """
 
 import logging
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -13,11 +14,13 @@ from rest_framework.response import Response
 
 from apps.accounts.permissions import IsSameBusiness, IsNotExpired, IsOwnerOrManager
 from apps.core.messages import MESSAGES
-from .models import Category, Product
+from .models import Category, Product, ProductUnit, get_fixed_ratio
 from .serializers import (
     CategorySerializer,
     ProductSerializer,
     ProductCreateSerializer,
+    ProductUnitSerializer,
+    ProductUnitWriteSerializer,
     parse_product_csv,
 )
 
@@ -162,6 +165,122 @@ def product_detail(request, product_id):
     product.is_active = False
     product.save(update_fields=['is_active'])
     return Response({'detail': MESSAGES['PRODUCT_DELETED']}, status=status.HTTP_200_OK)
+
+
+# ── Pack-to-unit selling (C10) ───────────────────────────────────────────────
+# Manages a product's ProductUnit tree — the different sellable/stockable
+# physical forms of one product (e.g. bag / gorogoro / sachet). Read is
+# open to any authenticated staff (Sell mode needs it); write is
+# owner/manager-only, same tier as editing the product itself.
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated, IsNotExpired])
+def product_unit_list_create(request, product_id):
+    """
+    GET  /api/v1/catalog/products/{id}/units/  — This product's unit tree.
+    POST /api/v1/catalog/products/{id}/units/  — Add a new form.
+    """
+    business, err = get_business_or_404(request)
+    if err:
+        return err
+
+    try:
+        product = Product.objects.get(id=product_id, business=business, is_active=True)
+    except Product.DoesNotExist:
+        return Response({'detail': MESSAGES['PRODUCT_NOT_FOUND']}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        units = product.units.select_related('parent').order_by('created_at')
+        return Response(ProductUnitSerializer(units, many=True).data)
+
+    if not IsOwnerOrManager().has_permission(request, None):
+        return Response({'detail': MESSAGES['OWNER_OR_MANAGER_ONLY']}, status=status.HTTP_403_FORBIDDEN)
+
+    serializer = ProductUnitWriteSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+
+    parent = data.get('parent')
+    if parent is not None and parent.product_id != product.id:
+        return Response({'detail': MESSAGES['PRODUCT_UNIT_PARENT_WRONG_PRODUCT']}, status=status.HTTP_400_BAD_REQUEST)
+
+    if data.get('is_root') and product.units.filter(is_root=True).exists():
+        return Response({'detail': MESSAGES['PRODUCT_UNIT_ROOT_ALREADY_EXISTS']}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Pre-fill a true unit-of-measure ratio (litre:ml, kg:g, dozen:piece)
+    # when the caller didn't supply one — see get_fixed_ratio(). Anything
+    # container/packaging-based (gorogoro, pack, bag) has no default and
+    # must come from the payload; validate() already rejected a missing
+    # ratio for a non-root unit, so this only ever fills in a value that
+    # would otherwise have failed.
+    if parent is not None and data.get('ratio_to_parent') is None:
+        fixed = get_fixed_ratio(parent.unit, data['unit'])
+        if fixed is not None:
+            data['ratio_to_parent'] = fixed
+        else:
+            return Response({'detail': MESSAGES['PRODUCT_UNIT_NEEDS_RATIO']}, status=status.HTTP_400_BAD_REQUEST)
+
+    unit = ProductUnit(product=product, **data)
+    try:
+        unit.full_clean()
+    except DjangoValidationError as e:
+        return Response({'detail': '; '.join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+    unit.save()
+
+    return Response(
+        {'detail': MESSAGES['PRODUCT_UNIT_CREATED'], 'unit': ProductUnitSerializer(unit).data},
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(['GET', 'PATCH', 'DELETE'])
+@permission_classes([IsAuthenticated, IsNotExpired])
+def product_unit_detail(request, product_id, unit_id):
+    """
+    GET    /api/v1/catalog/products/{id}/units/{unit_id}/
+    PATCH  /api/v1/catalog/products/{id}/units/{unit_id}/
+    DELETE /api/v1/catalog/products/{id}/units/{unit_id}/
+    """
+    business, err = get_business_or_404(request)
+    if err:
+        return err
+
+    try:
+        unit = ProductUnit.objects.select_related('product', 'parent').get(
+            id=unit_id, product_id=product_id, product__business=business,
+        )
+    except ProductUnit.DoesNotExist:
+        return Response({'detail': MESSAGES['PRODUCT_UNIT_NOT_FOUND']}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        return Response(ProductUnitSerializer(unit).data)
+
+    if not IsOwnerOrManager().has_permission(request, None):
+        return Response({'detail': MESSAGES['OWNER_OR_MANAGER_ONLY']}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == 'PATCH':
+        serializer = ProductUnitWriteSerializer(unit, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        parent = serializer.validated_data.get('parent', unit.parent)
+        if parent is not None and parent.product_id != unit.product_id:
+            return Response({'detail': MESSAGES['PRODUCT_UNIT_PARENT_WRONG_PRODUCT']}, status=status.HTTP_400_BAD_REQUEST)
+
+        for field, value in serializer.validated_data.items():
+            setattr(unit, field, value)
+        try:
+            unit.full_clean()
+        except DjangoValidationError as e:
+            return Response({'detail': '; '.join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+        unit.save()
+        return Response({'detail': MESSAGES['PRODUCT_UNIT_UPDATED'], 'unit': ProductUnitSerializer(unit).data})
+
+    # DELETE
+    if unit.is_root:
+        return Response({'detail': MESSAGES['PRODUCT_UNIT_CANNOT_DELETE_ROOT']}, status=status.HTTP_400_BAD_REQUEST)
+    if unit.children.exists():
+        return Response({'detail': MESSAGES['PRODUCT_UNIT_CANNOT_DELETE_HAS_CHILDREN']}, status=status.HTTP_400_BAD_REQUEST)
+    unit.delete()
+    return Response({'detail': MESSAGES['PRODUCT_UNIT_DELETED']}, status=status.HTTP_200_OK)
 
 
 # ── CSV import ────────────────────────────────────────────────────────────────

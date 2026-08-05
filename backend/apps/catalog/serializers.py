@@ -10,7 +10,7 @@ from decimal import Decimal, InvalidOperation
 from rest_framework import serializers
 
 from apps.core.messages import MESSAGES
-from .models import Category, Product
+from .models import Category, Product, ProductUnit
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -101,6 +101,80 @@ class ProductCreateSerializer(ProductSerializer):
     def create(self, validated_data):
         validated_data.pop('category_name', None)  # resolved to `category` in the view, not a model field
         return Product.objects.create(**validated_data)
+
+
+# ── Pack-to-unit selling (C10) ──────────────────────────────────────────────
+
+class ProductUnitSerializer(serializers.ModelSerializer):
+    """
+    Read shape for a ProductUnit — includes the computed available
+    quantity so the frontend never has to walk the tree itself to know
+    what's sellable right now.
+    """
+    unit_display = serializers.CharField(source='get_unit_display', read_only=True)
+    available_quantity = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductUnit
+        fields = [
+            'id', 'product', 'unit', 'unit_display', 'parent',
+            'ratio_to_parent', 'is_repackaged', 'stock_quantity',
+            'selling_price', 'is_sellable', 'is_root',
+            'available_quantity', 'created_at', 'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'product', 'unit_display', 'stock_quantity',
+            'available_quantity', 'created_at', 'updated_at',
+        ]
+
+    def get_available_quantity(self, obj):
+        return obj.available_quantity()
+
+
+class ProductUnitWriteSerializer(serializers.ModelSerializer):
+    """
+    Used for create/update. `product` and `stock_quantity` are set by the
+    view, not the client — stock_quantity only ever moves through a
+    RepackageEvent (or the root's own restock flow), never a direct edit
+    here, so it's excluded rather than merely read-only.
+    """
+    parent = serializers.PrimaryKeyRelatedField(
+        queryset=ProductUnit.objects.all(), required=False, allow_null=True,
+    )
+
+    class Meta:
+        model = ProductUnit
+        fields = [
+            'id', 'unit', 'parent', 'ratio_to_parent',
+            'is_repackaged', 'selling_price', 'is_sellable', 'is_root',
+        ]
+        read_only_fields = ['id']
+
+    def validate(self, attrs):
+        # Mirrors ProductUnit.clean() at the API layer, so a bad payload
+        # comes back as a normal 400 with a real MESSAGES string instead
+        # of the model's ValidationError surfacing as a 500 deep inside
+        # .save(). The model-level clean() still runs too (see the view)
+        # as the last line of defence — this is for a good error message,
+        # not the only check.
+        is_root = attrs.get('is_root', getattr(self.instance, 'is_root', False))
+        parent = attrs.get('parent', getattr(self.instance, 'parent', None))
+        ratio = attrs.get('ratio_to_parent', getattr(self.instance, 'ratio_to_parent', None))
+        is_repackaged = attrs.get('is_repackaged', getattr(self.instance, 'is_repackaged', False))
+
+        if is_root:
+            if parent is not None:
+                raise serializers.ValidationError(MESSAGES['PRODUCT_UNIT_ROOT_NO_PARENT'])
+            if ratio is not None:
+                raise serializers.ValidationError(MESSAGES['PRODUCT_UNIT_ROOT_NO_RATIO'])
+            if is_repackaged:
+                raise serializers.ValidationError(MESSAGES['PRODUCT_UNIT_ROOT_NOT_REPACKAGED'])
+        else:
+            if parent is None:
+                raise serializers.ValidationError(MESSAGES['PRODUCT_UNIT_NEEDS_PARENT'])
+            if ratio is None:
+                raise serializers.ValidationError(MESSAGES['PRODUCT_UNIT_NEEDS_RATIO'])
+        return attrs
 
 
 class CSVImportResultSerializer(serializers.Serializer):

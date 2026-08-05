@@ -2,11 +2,8 @@
   "_notes": [
     "Shared unit vocabulary referenced by all templates.",
     "'colloquial' lists local naming variants worth accepting as synonyms",
-    "in product entry (e.g. so 'goro' resolves to the gorogoro unit).",
-    "This list is a draft — colloquial terms especially need native review.",
-    "'debe_20l' removed intentionally (C10 build) — a debe isn't a",
-    "standard size the way gorogoro is; it varies by container. Litre/ml",
-    "cover that case correctly instead via ProductUnit.ratio_to_parent."
+    "in product entry (e.g. so 'debe' and '20L tin' resolve to the same unit).",
+    "This list is a draft — colloquial terms especially need native review."
   ],
   "units": [
     { "id": "piece", "label": "Piece", "colloquial": ["pc", "kipande"] },
@@ -22,7 +19,8 @@
     { "id": "bale", "label": "Bale", "colloquial": [] },
     { "id": "sack_50kg", "label": "50kg sack/bag", "colloquial": ["gunia"] },
     { "id": "tonne", "label": "Tonne", "colloquial": ["ton"] },
-    { "id": "gorogoro", "label": "Gorogoro (standard tin measure)", "colloquial": ["goro"] },
+    { "id": "debe_20l", "label": "Debe (20L tin)", "colloquial": ["debe", "tin"] },
+    { "id": "gorogoro", "label": "Gorogoro (~2kg tin measure)", "colloquial": ["goro"] },
     { "id": "dozen", "label": "Dozen", "colloquial": ["dazani"] },
     { "id": "roll", "label": "Roll", "colloquial": [] },
     { "id": "metre", "label": "Metre (length)", "colloquial": ["m"] },
