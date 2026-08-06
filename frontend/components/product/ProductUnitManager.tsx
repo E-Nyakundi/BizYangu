@@ -75,6 +75,12 @@ interface AddUnitModalProps {
 
 function AddUnitModal({ product, units, onClose, onSaved, editing }: AddUnitModalProps) {
   const root = units.find((u) => u.is_root)
+  // The unit being created/edited IS the root when: we're editing the
+  // existing root row, or there's no root yet at all (first form ever
+  // added for this product — nothing exists to be "made from"). In
+  // either case there's no parent to pick, no ratio, and it can't be
+  // marked repackaged (see catalog_productunit_root_not_repackaged).
+  const isRootForm = editing ? editing.is_root : units.length === 0
   const [parentId, setParentId] = useState(editing?.parent ?? root?.id ?? '')
   const [unit, setUnit] = useState(editing?.unit ?? '')
   const [kind, setKind] = useState<'shared' | 'repackaged'>(editing?.is_repackaged ? 'repackaged' : 'shared')
@@ -93,14 +99,24 @@ function AddUnitModal({ product, units, onClose, onSaved, editing }: AddUnitModa
     }
     setSaving(true)
     setError('')
-    const payload: Partial<ProductUnitPayload> = {
-      unit,
-      parent: parentId || null,
-      ratio_to_parent: ratio || null,
-      is_repackaged: kind === 'repackaged',
-      selling_price: price || null,
-      is_sellable: sellable,
-    }
+    const payload: Partial<ProductUnitPayload> = isRootForm
+      ? {
+          unit,
+          is_root: true,
+          parent: null,
+          ratio_to_parent: null,
+          is_repackaged: false,
+          selling_price: price || null,
+          is_sellable: sellable,
+        }
+      : {
+          unit,
+          parent: parentId || null,
+          ratio_to_parent: ratio || null,
+          is_repackaged: kind === 'repackaged',
+          selling_price: price || null,
+          is_sellable: sellable,
+        }
     try {
       const saved = editing
         ? await updateProductUnit(product.id, editing.id, payload)
@@ -116,17 +132,26 @@ function AddUnitModal({ product, units, onClose, onSaved, editing }: AddUnitModa
 
   return (
     <Overlay onClose={onClose}>
-      <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{t('UNITS_ADD_FORM_TITLE')}</h3>
+      <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
+        {isRootForm ? t('UNITS_ADD_ROOT_TITLE') : t('UNITS_ADD_FORM_TITLE')}
+      </h3>
+      {isRootForm && (
+        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 'var(--sp-3)' }}>
+          {t('UNITS_ROOT_HELP')}
+        </p>
+      )}
 
-      <Field label={t('UNITS_PARENT_LABEL')}>
-        <select style={inputStyle} value={parentId} onChange={(e) => setParentId(e.target.value)}>
-          {units.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.is_root ? t('UNITS_ROOT_LABEL') : productUnitLabel(u.unit)}
-            </option>
-          ))}
-        </select>
-      </Field>
+      {!isRootForm && (
+        <Field label={t('UNITS_PARENT_LABEL')}>
+          <select style={inputStyle} value={parentId} onChange={(e) => setParentId(e.target.value)}>
+            {units.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.is_root ? t('UNITS_ROOT_LABEL') : productUnitLabel(u.unit)}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
 
       <Field label={t('UNITS_UNIT_LABEL')}>
         <select style={inputStyle} value={unit} onChange={(e) => setUnit(e.target.value)}>
@@ -137,24 +162,28 @@ function AddUnitModal({ product, units, onClose, onSaved, editing }: AddUnitModa
         </select>
       </Field>
 
-      <Field label={t('UNITS_KIND_LABEL')}>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8, fontSize: 14 }}>
-          <input type="radio" checked={kind === 'shared'} onChange={() => setKind('shared')} style={{ marginTop: 3 }} />
-          <span>{t('UNITS_KIND_SHARED')}</span>
-        </label>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 14 }}>
-          <input type="radio" checked={kind === 'repackaged'} onChange={() => setKind('repackaged')} style={{ marginTop: 3 }} />
-          <span>{t('UNITS_KIND_REPACKAGED')}</span>
-        </label>
-      </Field>
+      {!isRootForm && (
+        <Field label={t('UNITS_KIND_LABEL')}>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 8, fontSize: 14 }}>
+            <input type="radio" checked={kind === 'shared'} onChange={() => setKind('shared')} style={{ marginTop: 3 }} />
+            <span>{t('UNITS_KIND_SHARED')}</span>
+          </label>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 14 }}>
+            <input type="radio" checked={kind === 'repackaged'} onChange={() => setKind('repackaged')} style={{ marginTop: 3 }} />
+            <span>{t('UNITS_KIND_REPACKAGED')}</span>
+          </label>
+        </Field>
+      )}
 
-      <Field label={t('UNITS_RATIO_LABEL', { unit: unit ? productUnitLabel(unit) : '' })}>
-        <input
-          style={inputStyle} inputMode="decimal" placeholder="e.g. 1000"
-          value={ratio} onChange={(e) => setRatio(e.target.value)}
-        />
-        <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>{t('UNITS_RATIO_HELP')}</p>
-      </Field>
+      {!isRootForm && (
+        <Field label={t('UNITS_RATIO_LABEL', { unit: unit ? productUnitLabel(unit) : '' })}>
+          <input
+            style={inputStyle} inputMode="decimal" placeholder="e.g. 1000"
+            value={ratio} onChange={(e) => setRatio(e.target.value)}
+          />
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>{t('UNITS_RATIO_HELP')}</p>
+        </Field>
+      )}
 
       <Field label={t('UNITS_PRICE_LABEL')}>
         <input
