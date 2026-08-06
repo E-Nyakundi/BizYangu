@@ -303,19 +303,16 @@ def create_sale(request):
                 # Product.current_stock/low_stock_threshold, neither of
                 # which changed for this line.
                 unit = li['product_unit']
-                counted_node, _ratio = unit._walk_to_counted_ancestor()
-                qty_before = counted_node.stock_quantity
-                unit.deduct_sale(li['quantity'])
-                counted_node.refresh_from_db(fields=['stock_quantity'])
+                qty_before, qty_after = unit.deduct_sale(li['quantity'])
                 StockMovement.objects.create(
                     business=business,
                     product=li['product'],
                     product_unit=unit,
                     transaction=txn,
                     movement_type=StockMovement.MovementType.SALE,
-                    quantity_change=counted_node.stock_quantity - qty_before,
+                    quantity_change=qty_after - qty_before,
                     quantity_before=qty_before,
-                    quantity_after=counted_node.stock_quantity,
+                    quantity_after=qty_after,
                     created_by=request.user,
                 )
             elif li['product'] and li['product'].track_stock:
@@ -788,19 +785,16 @@ def create_refund(request):
                 # restore that same pool via ProductUnit.restore_sale, not
                 # the branch below.
                 unit = original_item.product_unit
-                counted_node, _ratio = unit._walk_to_counted_ancestor()
-                qty_before = counted_node.stock_quantity
-                unit.restore_sale(line['quantity'])
-                counted_node.refresh_from_db(fields=['stock_quantity'])
+                qty_before, qty_after = unit.restore_sale(line['quantity'])
                 StockMovement.objects.create(
                     business=business,
                     product=product,
                     product_unit=unit,
                     transaction=refund_txn,
                     movement_type=StockMovement.MovementType.REFUND,
-                    quantity_change=counted_node.stock_quantity - qty_before,
+                    quantity_change=qty_after - qty_before,
                     quantity_before=qty_before,
-                    quantity_after=counted_node.stock_quantity,
+                    quantity_after=qty_after,
                     notes=MESSAGES['STOCK_MOVEMENT_REFUND_NOTE'].format(reference=original.reference_number),
                     created_by=request.user,
                 )
@@ -883,19 +877,16 @@ def void_transaction(request, transaction_id):
                     # pool, not Product.current_stock — restore that same
                     # pool via ProductUnit.restore_sale instead.
                     unit = item.product_unit
-                    counted_node, _ratio = unit._walk_to_counted_ancestor()
-                    qty_before = counted_node.stock_quantity
-                    unit.restore_sale(item.quantity)
-                    counted_node.refresh_from_db(fields=['stock_quantity'])
+                    qty_before, qty_after = unit.restore_sale(item.quantity)
                     StockMovement.objects.create(
                         business=business,
                         product=item.product,
                         product_unit=unit,
                         transaction=txn,
                         movement_type=StockMovement.MovementType.REFUND,
-                        quantity_change=counted_node.stock_quantity - qty_before,
+                        quantity_change=qty_after - qty_before,
                         quantity_before=qty_before,
-                        quantity_after=counted_node.stock_quantity,
+                        quantity_after=qty_after,
                         notes=MESSAGES['STOCK_MOVEMENT_REFUND_NOTE'].format(reference=txn.reference_number),
                         created_by=request.user,
                     )

@@ -283,24 +283,38 @@ class ProductUnit(models.Model):
     def available_quantity(self):
         """Quantity of this specific unit currently sellable."""
         counted_node, ratio = self._walk_to_counted_ancestor()
+        base = counted_node.product.current_stock if counted_node.is_root else counted_node.stock_quantity
         if counted_node is self:
-            return self.stock_quantity
-        return counted_node.stock_quantity * ratio
+            return base
+        return base * ratio
 
     def deduct_sale(self, quantity):
         """
         Records a sale of `quantity` of this unit by decrementing
-        whichever ancestor actually holds the counter for this pool.
+        whichever ancestor actually holds the counter for this pool —
+        Product.current_stock if that ancestor is the root (the root
+        doesn't keep its own separate number; it just is
+        Product.current_stock, so restocking/count/loss and unit-based
+        sales always agree), or ProductUnit.stock_quantity if it's a
+        repackaged node with its own independently-tracked pool.
         Caller is responsible for wrapping this in the same atomic
         block as the rest of the sale and for not calling this with
-        quantity > available_quantity().
+        quantity > available_quantity(). Returns (qty_before, qty_after)
+        of whichever field was actually changed, for the caller's
+        StockMovement audit row.
         """
         counted_node, ratio = self._walk_to_counted_ancestor()
-        if counted_node is self:
-            counted_node.stock_quantity -= quantity
-        else:
-            counted_node.stock_quantity -= (quantity / ratio)
+        delta = quantity if counted_node is self else (quantity / ratio)
+        if counted_node.is_root:
+            product = counted_node.product
+            qty_before = product.current_stock
+            product.current_stock -= delta
+            product.save(update_fields=['current_stock'])
+            return qty_before, product.current_stock
+        qty_before = counted_node.stock_quantity
+        counted_node.stock_quantity -= delta
         counted_node.save(update_fields=['stock_quantity', 'updated_at'])
+        return qty_before, counted_node.stock_quantity
 
     def restore_sale(self, quantity):
         """
@@ -310,10 +324,17 @@ class ProductUnit(models.Model):
         specific sellable form (transactions/views.py void_transaction
         and create_refund), mirroring deduct_sale exactly so the same
         pool that was decremented at sale time is the one restored.
+        Returns (qty_before, qty_after) of whichever field changed.
         """
         counted_node, ratio = self._walk_to_counted_ancestor()
-        if counted_node is self:
-            counted_node.stock_quantity += quantity
-        else:
-            counted_node.stock_quantity += (quantity / ratio)
+        delta = quantity if counted_node is self else (quantity / ratio)
+        if counted_node.is_root:
+            product = counted_node.product
+            qty_before = product.current_stock
+            product.current_stock += delta
+            product.save(update_fields=['current_stock'])
+            return qty_before, product.current_stock
+        qty_before = counted_node.stock_quantity
+        counted_node.stock_quantity += delta
         counted_node.save(update_fields=['stock_quantity', 'updated_at'])
+        return qty_before, counted_node.stock_quantity
