@@ -53,6 +53,7 @@ export const PRODUCT_UNITS: { id: string; label: string }[] = [
   { id: 'sack_50kg', label: '50kg sack' },
   { id: 'tonne', label: 'Tonne' },
   { id: 'gorogoro', label: 'Gorogoro (standard tin measure)' },
+  { id: 'stick', label: 'Stick' },
   { id: 'dozen', label: 'Dozen' },
   { id: 'roll', label: 'Roll' },
   { id: 'metre', label: 'Metre' },

@@ -21,6 +21,7 @@
     { "id": "tonne", "label": "Tonne", "colloquial": ["ton"] },
     { "id": "debe_20l", "label": "Debe (20L tin)", "colloquial": ["debe", "tin"] },
     { "id": "gorogoro", "label": "Gorogoro (~2kg tin measure)", "colloquial": ["goro"] },
+    { "id": "stick", "label": "Stick", "colloquial": [] },
     { "id": "dozen", "label": "Dozen", "colloquial": ["dazani"] },
     { "id": "roll", "label": "Roll", "colloquial": [] },
     { "id": "metre", "label": "Metre (length)", "colloquial": ["m"] },

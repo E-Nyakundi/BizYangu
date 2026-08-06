@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { apiErrorMessage } from '@/lib/api'
 import { COPY } from '@/lib/copy'
 import { PRODUCT_UNITS, productUnitLabel } from '@/lib/knowledge'
 import {
@@ -107,7 +108,7 @@ function AddUnitModal({ product, units, onClose, onSaved, editing }: AddUnitModa
       onSaved(saved)
       onClose()
     } catch (e: any) {
-      setError(e?.response?.data?.detail ?? t('UNITS_GENERIC_ERROR'))
+      setError(apiErrorMessage(e, t('UNITS_GENERIC_ERROR')))
     } finally {
       setSaving(false)
     }

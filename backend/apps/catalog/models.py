@@ -79,6 +79,7 @@ class Product(models.Model):
         # volume. The actual weight-per-gorogoro for a given product is
         # captured on ProductUnit.ratio_to_parent, never assumed here.
         GOROGORO = 'gorogoro', 'Gorogoro (standard tin measure)'
+        STICK = 'stick', 'Stick'
         DOZEN = 'dozen', 'Dozen'
         ROLL = 'roll', 'Roll'
         METRE = 'metre', 'Metre (length)'
