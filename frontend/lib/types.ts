@@ -76,6 +76,50 @@ export interface Product {
   updated_at: string
 }
 
+// ── Pack-to-unit selling / repackaging (C10) ────────────────────────────────
+// One sellable/stockable physical form of a product, forming a tree via
+// `parent`. Two kinds of non-root node:
+//  - is_repackaged=false (shared pool, e.g. pack -> stick): available_quantity
+//    is computed from an ancestor's stock_quantity via ratio_to_parent — never
+//    stored on this node.
+//  - is_repackaged=true (own counter, e.g. bag -> gorogoro): stock_quantity is
+//    real and only ever increases via a RepackageEvent.
+export interface ProductUnit {
+  id: string
+  product: string
+  unit: string
+  unit_display: string
+  parent: string | null
+  ratio_to_parent: string | null
+  is_repackaged: boolean
+  stock_quantity: string
+  selling_price: string | null
+  is_sellable: boolean
+  is_root: boolean
+  // Computed server-side — always the right number to show/sell against,
+  // regardless of whether this node holds its own counter or shares one.
+  available_quantity: string
+  created_at: string
+  updated_at: string
+}
+
+export interface RepackageEvent {
+  id: string
+  product_name: string
+  from_unit: string
+  from_unit_label: string
+  to_unit: string
+  to_unit_label: string
+  quantity_consumed: string
+  quantity_produced: string
+  expected_yield: string
+  loss_quantity: string
+  notes: string
+  performed_by: string
+  performed_by_name: string
+  created_at: string
+}
+
 export type PaymentMethod = 'CASH' | 'MPESA' | 'CREDIT' | 'MIXED'
 export type TransactionType = 'SALE' | 'STOCK_IN' | 'ADJUSTMENT' | 'LOSS' | 'DAMAGE' | 'REFUND' | 'TRANSFER'
 export type PaymentStatus = 'PENDING' | 'CONFIRMED' | 'FAILED' | 'DISPUTED'
@@ -215,6 +259,12 @@ export interface CustomerDetail extends Customer {
 export interface CartItem {
   product: Product
   quantity: number
+  // Set when this line is sold as a specific packaged/repackaged form
+  // (C10) rather than the product's default restocked form. When
+  // present, its own selling_price/available_quantity govern this line
+  // instead of product.selling_price/current_stock, and the sale payload
+  // sends product_unit_id instead of product_id.
+  productUnit?: ProductUnit
   // True for a freeform "not in catalog" item (Phase 9, sell-without-
   // inventory). `product` is a client-only synthetic Product shape built
   // from the name/price the cashier typed — id is a locally-generated

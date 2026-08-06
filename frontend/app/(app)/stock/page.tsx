@@ -23,6 +23,7 @@ import { fetchBusiness } from '@/lib/business'
 import { groupByCategory } from '@/lib/grouping'
 import type { Product, Taxonomy } from '@/lib/types'
 import { COPY } from '@/lib/copy'
+import ProductUnitManager from '@/components/product/ProductUnitManager'
 
 // ── Re-use transactions endpoint for stock-in / adjustment / loss ────────────
 // The backend routes these through /transactions/stock-in/ and /adjustment/
@@ -864,6 +865,20 @@ function ProductDrawer({
                 </div>
               </div>
             ))
+          )}
+        </div>
+
+        {/* Sellable forms (C10 — pack-to-unit selling / repackaging) */}
+        <div style={{ padding: 'var(--sp-4)', borderTop: '1px solid var(--surface-2)' }}>
+          <ProductUnitManager product={product} />
+          {canWrite && (
+            <Link
+              href="/repackage"
+              className="btn-secondary btn-sm"
+              style={{ display: 'block', textAlign: 'center', marginTop: 'var(--sp-3)' }}
+            >
+              {COPY.REPACKAGE_TITLE} →
+            </Link>
           )}
         </div>
       </div>

@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/auth'
 import { listProducts } from '@/lib/catalog'
+import { productUnitLabel } from '@/lib/knowledge'
 import { groupByCategory } from '@/lib/grouping'
 import { createSale } from '@/lib/transactions'
 import { initiateStkPush, pollStkStatus } from '@/lib/payments'
@@ -19,8 +20,9 @@ import { fetchBusiness } from '@/lib/business'
 import { shareReceiptImage } from '@/lib/receipt-share'
 import ReceiptCard from '@/components/sell/ReceiptCard'
 import ScannerButton from '@/components/scanner/ScannerButton'
-import type { Product, CartItem, PaymentMethod, Transaction, MpesaWsEvent, Business } from '@/lib/types'
+import type { Product, ProductUnit, CartItem, PaymentMethod, Transaction, MpesaWsEvent, Business } from '@/lib/types'
 import { COPY } from '@/lib/copy'
+import UnitPickerModal from '@/components/product/UnitPickerModal'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000/api/v1'
 const WS_BASE = API_BASE.replace(/^http/, 'ws').replace('/api/v1', '')
@@ -81,7 +83,7 @@ function CategoryChip({ label, active, onClick }: { label: string; active: boole
   )
 }
 
-function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }) {
+function ProductCard({ product, onAdd, onChooseForm }: { product: Product; onAdd: () => void; onChooseForm: () => void }) {
   const outOfStock = product.track_stock && Number(product.current_stock) <= 0
   return (
     <button
@@ -97,10 +99,24 @@ function ProductCard({ product, onAdd }: { product: Product; onAdd: () => void }
         width: '100%',
         opacity: outOfStock ? 0.45 : 1,
         transition: 'border-color 0.15s',
+        position: 'relative',
       }}
       onMouseEnter={(e) => !outOfStock && ((e.currentTarget as HTMLElement).style.borderColor = 'var(--color-teal)')}
       onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.borderColor = 'var(--surface-4)')}
     >
+      {/* C10 — sell as a specific packaged/repackaged form instead of the default. */}
+      <span
+        role="button"
+        aria-label={COPY.SELL_CHOOSE_FORM}
+        onClick={(e) => { e.stopPropagation(); onChooseForm() }}
+        style={{
+          position: 'absolute', top: 6, right: 6, width: 22, height: 22,
+          borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'var(--surface-3, rgba(255,255,255,0.06))', color: 'var(--color-muted)', fontSize: 13,
+        }}
+      >
+        ⋯
+      </span>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 'var(--sp-2)' }}>
         <span style={{ fontWeight: 600, fontSize: 'var(--fs-sm)', color: 'var(--color-off-white)', lineHeight: 1.3 }}>
           {product.name}
@@ -207,7 +223,8 @@ function CartRow({
   onDec: () => void
   onRemove: () => void
 }) {
-  const subtotal = item.quantity * Number(item.product.selling_price)
+  const unitPrice = Number(item.productUnit?.selling_price ?? item.product.selling_price)
+  const subtotal = item.quantity * unitPrice
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 'var(--sp-3)',
@@ -215,7 +232,10 @@ function CartRow({
     }}>
       <div style={{ flex: 1 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
-          <span style={{ fontWeight: 600, fontSize: 'var(--fs-sm)' }}>{item.product.name}</span>
+          <span style={{ fontWeight: 600, fontSize: 'var(--fs-sm)' }}>
+            {item.product.name}
+            {item.productUnit && !item.productUnit.is_root ? ` (${productUnitLabel(item.productUnit.unit)})` : ''}
+          </span>
           {item.isCustom && (
             <span className="badge badge-muted" style={{ fontSize: 'var(--fs-xs)' }}>
               {COPY.SELL_CUSTOM_ITEM_BADGE}
@@ -223,7 +243,7 @@ function CartRow({
           )}
         </div>
         <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>
-          KES {Number(item.product.selling_price).toLocaleString()} × {item.quantity}
+          KES {unitPrice.toLocaleString()} × {item.quantity}
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-1)' }}>
@@ -518,6 +538,7 @@ export default function SellPage() {
 
   // Cart
   const [cart, setCart] = useState<CartItem[]>([])
+  const [unitPickerProduct, setUnitPickerProduct] = useState<Product | null>(null)
 
   // Custom item (Phase 9, sell-without-inventory) — a not-in-catalog item
   // the cashier is about to add via a name + price
@@ -651,15 +672,34 @@ export default function SellPage() {
 
   const addToCart = useCallback((product: Product) => {
     setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id)
+      const existing = prev.find((item) => item.product.id === product.id && !item.productUnit)
       if (existing) {
         const maxQty = product.track_stock ? Number(product.current_stock) : Infinity
         if (existing.quantity >= maxQty) return prev
         return prev.map((item) =>
-          item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.product.id === product.id && !item.productUnit ? { ...item, quantity: item.quantity + 1 } : item
         )
       }
       return [...prev, { product, quantity: 1 }]
+    })
+  }, [])
+
+  // C10 — add a specific packaged/repackaged form of a product, chosen via
+  // UnitPickerModal. Kept as its own cart line, distinct from a plain
+  // addToCart of the same product, since the two draw from different stock
+  // pools and prices.
+  const addUnitToCart = useCallback((product: Product, unit: ProductUnit) => {
+    setCart((prev) => {
+      const existing = prev.find((item) => item.product.id === product.id && item.productUnit?.id === unit.id)
+      if (existing) {
+        const maxQty = Number(unit.available_quantity)
+        if (existing.quantity >= maxQty) return prev
+        return prev.map((item) =>
+          item.product.id === product.id && item.productUnit?.id === unit.id
+            ? { ...item, quantity: item.quantity + 1 } : item
+        )
+      }
+      return [...prev, { product, quantity: 1, productUnit: unit }]
     })
   }, [])
 
@@ -710,31 +750,36 @@ export default function SellPage() {
     setCustomItemOpen(false)
   }, [])
 
-  const removeFromCart = useCallback((productId: string) => {
-    setCart((prev) => prev.filter((item) => item.product.id !== productId))
+  const removeFromCart = useCallback((productId: string, unitId?: string) => {
+    setCart((prev) => prev.filter((item) => !(item.product.id === productId && (item.productUnit?.id ?? undefined) === unitId)))
   }, [])
 
-  const incrementQty = useCallback((productId: string) => {
+  const incrementQty = useCallback((productId: string, unitId?: string) => {
     setCart((prev) =>
       prev.map((item) => {
-        if (item.product.id !== productId) return item
-        const maxQty = item.product.track_stock ? Number(item.product.current_stock) : Infinity
+        if (item.product.id !== productId || (item.productUnit?.id ?? undefined) !== unitId) return item
+        const maxQty = item.productUnit
+          ? Number(item.productUnit.available_quantity)
+          : (item.product.track_stock ? Number(item.product.current_stock) : Infinity)
         return item.quantity < maxQty ? { ...item, quantity: item.quantity + 1 } : item
       })
     )
   }, [])
 
-  const decrementQty = useCallback((productId: string) => {
+  const decrementQty = useCallback((productId: string, unitId?: string) => {
     setCart((prev) =>
       prev.flatMap((item) => {
-        if (item.product.id !== productId) return [item]
+        if (item.product.id !== productId || (item.productUnit?.id ?? undefined) !== unitId) return [item]
         if (item.quantity <= 1) return []
         return [{ ...item, quantity: item.quantity - 1 }]
       })
     )
   }, [])
 
-  const total = cart.reduce((sum, item) => sum + item.quantity * Number(item.product.selling_price), 0)
+  const total = cart.reduce(
+    (sum, item) => sum + item.quantity * Number(item.productUnit?.selling_price ?? item.product.selling_price),
+    0,
+  )
 
   // ── Submit sale ───────────────────────────────────────────────────────────
 
@@ -773,6 +818,11 @@ export default function SellPage() {
           ? {
               name: item.product.name,
               unit_price: item.product.selling_price,
+              quantity: String(item.quantity),
+            }
+          : item.productUnit
+          ? {
+              product_unit_id: item.productUnit.id,
               quantity: String(item.quantity),
             }
           : {
@@ -1003,7 +1053,7 @@ export default function SellPage() {
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 'var(--sp-3)' }}>
               {filteredProducts.map((p) => (
-                <ProductCard key={p.id} product={p} onAdd={() => addToCart(p)} />
+                <ProductCard key={p.id} product={p} onAdd={() => addToCart(p)} onChooseForm={() => setUnitPickerProduct(p)} />
               ))}
             </div>
           )}
@@ -1062,9 +1112,9 @@ export default function SellPage() {
                 <CartRow
                   key={item.product.id}
                   item={item}
-                  onInc={() => incrementQty(item.product.id)}
-                  onDec={() => decrementQty(item.product.id)}
-                  onRemove={() => removeFromCart(item.product.id)}
+                  onInc={() => incrementQty(item.product.id, item.productUnit?.id)}
+                  onDec={() => decrementQty(item.product.id, item.productUnit?.id)}
+                  onRemove={() => removeFromCart(item.product.id, item.productUnit?.id)}
                 />
               ))
             )}
@@ -1380,6 +1430,18 @@ export default function SellPage() {
           }
         }
       `}</style>
+
+      {unitPickerProduct && (
+        <UnitPickerModal
+          product={unitPickerProduct}
+          onClose={() => setUnitPickerProduct(null)}
+          onSelect={(unit) => {
+            if (unit) addUnitToCart(unitPickerProduct, unit)
+            else addToCart(unitPickerProduct)
+            setUnitPickerProduct(null)
+          }}
+        />
+      )}
     </div>
   )
 }

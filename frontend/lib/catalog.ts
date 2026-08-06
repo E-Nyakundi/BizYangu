@@ -3,7 +3,7 @@
  */
 
 import { api } from './api'
-import type { Product } from './types'
+import type { Product, ProductUnit } from './types'
 
 export interface ProductCreatePayload {
   name: string
@@ -68,4 +68,43 @@ export async function importProductsCsv(file: File): Promise<CSVImportResult> {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
   return data
+}
+
+// ── Pack-to-unit selling / repackaging (C10) ────────────────────────────────
+
+export interface ProductUnitPayload {
+  unit: string
+  parent?: string | null
+  ratio_to_parent?: string | null
+  is_repackaged?: boolean
+  selling_price?: string | null
+  is_sellable?: boolean
+  is_root?: boolean
+}
+
+/** A product's full sellable-form tree (root + every child unit). */
+export async function listProductUnits(productId: string): Promise<ProductUnit[]> {
+  const { data } = await api.get(`/catalog/products/${productId}/units/`)
+  return data
+}
+
+export async function createProductUnit(
+  productId: string,
+  payload: ProductUnitPayload,
+): Promise<ProductUnit> {
+  const { data } = await api.post(`/catalog/products/${productId}/units/`, payload)
+  return data.unit
+}
+
+export async function updateProductUnit(
+  productId: string,
+  unitId: string,
+  payload: Partial<ProductUnitPayload>,
+): Promise<ProductUnit> {
+  const { data } = await api.patch(`/catalog/products/${productId}/units/${unitId}/`, payload)
+  return data.unit
+}
+
+export async function deleteProductUnit(productId: string, unitId: string): Promise<void> {
+  await api.delete(`/catalog/products/${productId}/units/${unitId}/`)
 }

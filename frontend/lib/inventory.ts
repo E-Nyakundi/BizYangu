@@ -3,6 +3,7 @@
  */
 
 import { api } from './api'
+import type { RepackageEvent } from './types'
 
 // ── Response types ────────────────────────────────────────────────────────────
 
@@ -69,5 +70,27 @@ export interface StockCountPayload {
 
 export async function submitStockCount(payload: StockCountPayload): Promise<{ detail: string; movement: StockMovement }> {
   const { data } = await api.post('/inventory/count/', payload)
+  return data
+}
+
+// ── Pack-to-unit selling / repackaging (C10) ────────────────────────────────
+
+export interface RepackagePayload {
+  from_unit_id: string
+  to_unit_id: string
+  quantity_consumed: string
+  quantity_produced: string
+  notes?: string
+}
+
+export async function listRepackageEvents(productId?: string): Promise<RepackageEvent[]> {
+  const { data } = await api.get('/inventory/repackage/', {
+    params: productId ? { product: productId } : {},
+  })
+  return data
+}
+
+export async function createRepackageEvent(payload: RepackagePayload): Promise<RepackageEvent> {
+  const { data } = await api.post('/inventory/repackage/', payload)
   return data
 }

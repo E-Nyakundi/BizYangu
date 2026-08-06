@@ -16,8 +16,7 @@ staticfiles/
 .venv/
 venv/
 env/
-.env.production
-.env.production.example
+
 # ── Node / Next.js ──────────────────────────────────────────────
 node_modules/
 .next/
@@ -55,5 +54,3 @@ Thumbs.db
 *.key
 *.crt
 secrets/
-# ── Dev-only, regenerated per session ──
-env.download

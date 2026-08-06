@@ -10,7 +10,7 @@ from decimal import Decimal, InvalidOperation
 from rest_framework import serializers
 
 from apps.core.messages import MESSAGES
-from .models import Category, Product, ProductUnit
+from .models import Category, Product, ProductUnit, get_fixed_ratio
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -173,7 +173,17 @@ class ProductUnitWriteSerializer(serializers.ModelSerializer):
             if parent is None:
                 raise serializers.ValidationError(MESSAGES['PRODUCT_UNIT_NEEDS_PARENT'])
             if ratio is None:
-                raise serializers.ValidationError(MESSAGES['PRODUCT_UNIT_NEEDS_RATIO'])
+                # A missing ratio is only an error if there's no fixed
+                # unit-of-measure conversion for this pair (litre:ml,
+                # kg:g, dozen:piece) — those get filled in by the view
+                # after validation. Anything container/packaging-based
+                # (gorogoro, pack, bag, sack) has no default and must
+                # come from the payload, so it's still rejected here.
+                unit = attrs.get('unit', getattr(self.instance, 'unit', None))
+                if parent is not None and unit is not None and get_fixed_ratio(parent.unit, unit) is not None:
+                    pass
+                else:
+                    raise serializers.ValidationError(MESSAGES['PRODUCT_UNIT_NEEDS_RATIO'])
         return attrs
 
 
