@@ -138,8 +138,13 @@ def product_detail(request, product_id):
     if err:
         return err
 
+    # No is_active filter here (unlike product_list_create's listing
+    # queryset) — a deactivated product must still be reachable by id so
+    # PATCH { is_active: true } can bring it back. business scoping is
+    # the real access boundary; is_active is a visibility/soft-delete
+    # flag, not a security one.
     try:
-        product = Product.objects.get(id=product_id, business=business, is_active=True)
+        product = Product.objects.get(id=product_id, business=business)
     except Product.DoesNotExist:
         return Response(
             {'detail': MESSAGES['PRODUCT_NOT_FOUND']},
@@ -149,11 +154,51 @@ def product_detail(request, product_id):
     if request.method == 'GET':
         return Response(ProductSerializer(product).data)
 
+    # PATCH and DELETE both mutate the product — owner/manager only, same
+    # tier as editing a product's sellable-form tree (see
+    # product_unit_list_create above). Previously this endpoint had no
+    # role check at all beyond being logged in, so any staff member
+    # (including a cashier) could PATCH price, cost, category, or any
+    # other field on any product.
+    if not IsOwnerOrManager().has_permission(request, None):
+        return Response({'detail': MESSAGES['OWNER_OR_MANAGER_ONLY']}, status=status.HTTP_403_FORBIDDEN)
+
     if request.method == 'PATCH':
         serializer = ProductSerializer(product, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         # Block changing SKU directly
         serializer.validated_data.pop('sku', None)
+        # Block changing current_stock through this general-purpose edit
+        # endpoint too — current_stock only ever changes through
+        # /transactions/stock-in/, /loss/, or a Count, each of which
+        # writes a StockMovement row. Allowing it here as well would let
+        # an edit silently change stock with no audit trail, breaking
+        # the movement log every other stock change goes through.
+        serializer.validated_data.pop('current_stock', None)
+
+        # Validate an explicitly-given category id belongs to this
+        # business — product_list_create's POST path already does this;
+        # this PATCH path never did, so a bad/foreign category id would
+        # silently link a product across tenants instead of 400ing.
+        category = serializer.validated_data.get('category')
+        if category and category.business_id != business.id:
+            return Response(
+                {'detail': MESSAGES['CATEGORY_WRONG_BUSINESS']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Resolve category_name -> category, same get-or-create pattern
+        # as product creation. ProductSerializer's category_name field is
+        # read-only (it's a display field there — see the docstring on
+        # ProductSerializer), so a category_name sent by the product-edit
+        # screen's category picker never reaches validated_data on its
+        # own; without this it would be silently ignored on every edit.
+        # Only applies when no explicit category id was already sent.
+        category_name = str(request.data.get('category_name', '') or '').strip()
+        if not category and category_name:
+            category, _ = Category.objects.get_or_create(business=business, name=category_name)
+            serializer.validated_data['category'] = category
+
         cost_price_touched = 'cost_price' in serializer.validated_data
         serializer.save()
         if cost_price_touched:

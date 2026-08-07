@@ -50,6 +50,12 @@ class ProductSerializer(serializers.ModelSerializer):
             # suggestions endpoint (which filters on these fields) actually
             # has data to match against.
             'taxonomy_category_id', 'taxonomy_subcategory_id', 'taxonomy_brand',
+            # Phase 11 (perishability). Was on the model since migration
+            # 0003 but never added here, so it was silently unreadable
+            # and unwritable through the API — the same gap
+            # taxonomy_category_id/etc. had before Phase 8's fix above.
+            # Needed now for the product-edit screen.
+            'expiry_date',
             'stock_status',
             'created_at', 'updated_at',
         ]

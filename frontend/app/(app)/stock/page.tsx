@@ -789,7 +789,18 @@ function ProductDrawer({
               <h3 style={{ marginBottom: 2 }}>{product.name}</h3>
               <span className="mono" style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>{product.sku}</span>
             </div>
-            <button onClick={handleClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted)', fontSize: 20 }}>×</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+              {canWrite && (
+                <Link
+                  href={`/stock/edit/?id=${product.id}`}
+                  className="btn-ghost btn-sm"
+                  style={{ fontSize: 'var(--fs-xs)' }}
+                >
+                  {COPY.STOCK_DRAWER_EDIT_DETAILS}
+                </Link>
+              )}
+              <button onClick={handleClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-muted)', fontSize: 20 }}>×</button>
+            </div>
           </div>
 
           {/* Stock stat */}

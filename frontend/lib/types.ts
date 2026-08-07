@@ -71,6 +71,10 @@ export interface Product {
   is_active: boolean
   category: string | null
   category_name: string | null
+  taxonomy_category_id: string
+  taxonomy_subcategory_id: string
+  taxonomy_brand: string
+  expiry_date: string | null
   stock_status: string
   created_at: string
   updated_at: string

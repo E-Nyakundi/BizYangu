@@ -43,6 +43,77 @@ export async function listProducts(): Promise<Product[]> {
   return data
 }
 
+/** Single product, for the full-screen edit view. */
+export async function fetchProduct(id: string): Promise<Product> {
+  const { data } = await api.get(`/catalog/products/${id}/`)
+  return data
+}
+
+// ── Full product-detail editing (owner/manager only) ────────────────────────
+// Every field an owner/manager has authority over, post-onboarding.
+// `current_stock` is deliberately absent — the backend drops it from a
+// PATCH even if sent, since stock only changes through a movement-writing
+// endpoint (Add Stock / Loss / Count) so the audit trail stays accurate.
+export interface ProductUpdatePayload {
+  name?: string
+  barcode?: string
+  selling_price?: string
+  cost_price?: string | null
+  unit?: string
+  low_stock_threshold?: string
+  track_stock?: boolean
+  is_active?: boolean
+  category?: string | null
+  category_name?: string
+  taxonomy_category_id?: string
+  taxonomy_subcategory_id?: string
+  taxonomy_brand?: string
+  expiry_date?: string | null
+}
+
+/**
+ * Updates any subset of a product's fields. Pass `image` separately —
+ * when present, this sends multipart/form-data instead of JSON so the
+ * file upload works; otherwise it's a plain JSON PATCH.
+ */
+export async function updateProduct(
+  id: string,
+  payload: ProductUpdatePayload,
+  image?: File | null,
+): Promise<Product> {
+  if (image) {
+    const formData = new FormData()
+    Object.entries(payload).forEach(([key, value]) => {
+      if (value === undefined) return
+      // multipart has no native null — DRF's related/date fields already
+      // treat an empty string as "clear this field" for form-encoded
+      // data, so a null payload value (e.g. clearing category or
+      // expiry_date) has to travel as '' here rather than being dropped,
+      // or it would silently leave the existing value untouched instead
+      // of clearing it whenever an image is attached to the same edit.
+      formData.append(key, value === null ? '' : String(value))
+    })
+    formData.append('image', image)
+    const { data } = await api.patch(`/catalog/products/${id}/`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return data
+  }
+  const { data } = await api.patch(`/catalog/products/${id}/`, payload)
+  return data
+}
+
+/** Soft-deletes (hides from Sell/Stock, keeps history — reversible via reactivateProduct). */
+export async function deactivateProduct(id: string): Promise<void> {
+  await api.delete(`/catalog/products/${id}/`)
+}
+
+/** Undoes deactivateProduct. */
+export async function reactivateProduct(id: string): Promise<Product> {
+  const { data } = await api.patch(`/catalog/products/${id}/`, { is_active: true })
+  return data
+}
+
 export interface CategoryOption {
   id: string
   name: string
