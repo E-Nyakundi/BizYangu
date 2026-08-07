@@ -75,8 +75,8 @@ class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            'id', 'phone_number', 'name', 'role',
-            'business_id', 'business_name',
+            'id', 'phone_number', 'name', 'first_name', 'last_name', 'email',
+            'role', 'business_id', 'business_name',
             'subscription_status', 'days_remaining', 'demo_expires_at',
             'date_joined', 'has_pin',
         ]
@@ -89,6 +89,26 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class UserUpdateSerializer(serializers.ModelSerializer):
+    """
+    Used by PATCH /auth/me/ — the /setup "About you" step, /join's
+    name-capture step, and Settings' account-details edit. `name` is never
+    accepted directly here; User.save() derives it from first/last name.
+    """
+    email = serializers.EmailField(
+        required=False, allow_null=True, allow_blank=True,
+        error_messages={'invalid': MESSAGES['INVALID_EMAIL_FORMAT']},
+    )
+
     class Meta:
         model = User
-        fields = ['name']
+        fields = ['first_name', 'last_name', 'email']
+
+    def validate_email(self, value):
+        if not value:
+            return None
+        qs = User.objects.filter(email__iexact=value)
+        if self.instance is not None:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError(MESSAGES['EMAIL_ALREADY_IN_USE'])
+        return value

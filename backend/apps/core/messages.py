@@ -158,6 +158,11 @@ MESSAGES = {
     'NOT_FOUND': 'Not found.',
     'INVALID_PHONE_NUMBER': 'Invalid phone number.',
     'INVALID_PHONE_NUMBER_FORMAT': 'Invalid phone number. Use format: +254XXXXXXXXX or 07XXXXXXXX',
+    'FIRST_NAME_REQUIRED': 'First name is required.',
+    'LAST_NAME_REQUIRED': 'Last name is required.',
+    'EMAIL_ALREADY_IN_USE': 'That email address is already in use by another account.',
+    'INVALID_EMAIL_FORMAT': 'Please enter a valid email address.',
+    'ACCOUNT_UPDATED': 'Account details updated.',
 
     # Customers & Credit (Phase 12)
     'CUSTOMER_PHONE_IN_USE': 'A customer with this phone number already exists.',
@@ -339,6 +344,11 @@ MESSAGES_SW = {
     'NOT_FOUND': 'Haikusumatwa.',
     'INVALID_PHONE_NUMBER': 'Namba ya simu si sahihi.',
     'INVALID_PHONE_NUMBER_FORMAT': 'Nambari ya simu si sahihi. Tumia muundo: +254XXXXXXXXX au 07XXXXXXXX',
+    'FIRST_NAME_REQUIRED': 'Jina la kwanza linahitajika.',
+    'LAST_NAME_REQUIRED': 'Jina la mwisho linahitajika.',
+    'EMAIL_ALREADY_IN_USE': 'Barua pepe hiyo tayari inatumiwa na akaunti nyingine.',
+    'INVALID_EMAIL_FORMAT': 'Tafadhali weka barua pepe sahihi.',
+    'ACCOUNT_UPDATED': 'Maelezo ya akaunti yamesasishwa.',
 
     # Customers & Credit (Phase 12)
     'CUSTOMER_PHONE_IN_USE': 'Mteja mwenye namba hii ya simu tayari yupo.',

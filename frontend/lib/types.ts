@@ -8,6 +8,9 @@ export interface UserProfile {
   id: string
   phone_number: string
   name: string
+  first_name: string
+  last_name: string
+  email: string | null
   role: UserRole
   business_id: string | null
   business_name: string | null
