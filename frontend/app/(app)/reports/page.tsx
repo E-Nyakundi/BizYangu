@@ -59,6 +59,7 @@ function StatRow({ label, value }: { label: string; value: string }) {
 export default function ReportsPage() {
   const user = useAuthStore((s) => s.user)
   const canManage = user?.role === 'OWNER' || user?.role === 'MANAGER'
+  const [manageExpanded, setManageExpanded] = useState(false)
 
   const [tab, setTab] = useState<Tab>('daily')
 
@@ -107,24 +108,41 @@ export default function ReportsPage() {
         <Link href="/dashboard" className="btn-ghost" style={{ fontSize: 'var(--fs-xs)' }}>{COPY.REPORTS_GO_HOME}</Link>
       </div>
 
-      {/* E19: Payments/Creditors moved out of the main nav bar (mobile
-          overload) — their entry points live here instead, owner/manager
-          only, same gate the nav items used to carry. Full pages, not
-          folded into the report tabs below, since they're operational
-          screens (M-Pesa reconciliation, credit settlement), not reports. */}
+      {/* E19: on desktop, Payments/Creditors are already an always-expanded
+          nested tree under Reports in the side nav (see layout.tsx) — no
+          need to repeat them here. On mobile, the bottom nav can't show
+          nesting, so this collapsed-by-default accordion is the mobile
+          equivalent: same links, collapsed until tapped instead of always
+          visible. Same owner/manager gate either way. */}
       {canManage && (
-        <div style={{ marginBottom: 'var(--sp-5)' }}>
-          <p className="mono" style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-2)' }}>
+        <div className="mobile-only" style={{ marginBottom: 'var(--sp-5)' }}>
+          <button
+            onClick={() => setManageExpanded((v) => !v)}
+            className="btn-ghost"
+            style={{
+              fontSize: 'var(--fs-xs)',
+              color: 'var(--color-muted)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 'var(--sp-2)',
+              width: '100%',
+              justifyContent: 'flex-start',
+            }}
+            aria-expanded={manageExpanded}
+          >
+            <span style={{ transform: manageExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▸</span>
             {COPY.REPORTS_MANAGE_TITLE}
-          </p>
-          <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-            <Link href="/payments" className="btn-ghost" style={{ fontSize: 'var(--fs-xs)', display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
-              <span>💳</span> {COPY.REPORTS_MANAGE_PAYMENTS}
-            </Link>
-            <Link href="/creditors" className="btn-ghost" style={{ fontSize: 'var(--fs-xs)', display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
-              <span>🤝</span> {COPY.REPORTS_MANAGE_CREDITORS}
-            </Link>
-          </div>
+          </button>
+          {manageExpanded && (
+            <div className="nav-nested" style={{ marginTop: 'var(--sp-2)' }}>
+              <Link href="/payments" className="btn-ghost" style={{ fontSize: 'var(--fs-xs)', display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', textDecoration: 'none' }}>
+                <span>💳</span> {COPY.REPORTS_MANAGE_PAYMENTS}
+              </Link>
+              <Link href="/creditors" className="btn-ghost" style={{ fontSize: 'var(--fs-xs)', display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', textDecoration: 'none' }}>
+                <span>🤝</span> {COPY.REPORTS_MANAGE_CREDITORS}
+              </Link>
+            </div>
+          )}
         </div>
       )}
 

@@ -605,6 +605,7 @@ export const COPY = {
   REPORTS_MANAGE_TITLE: 'Manage',
   REPORTS_MANAGE_PAYMENTS: 'Payments — M-Pesa reconciliation',
   REPORTS_MANAGE_CREDITORS: 'Creditors — who owes what',
+  REPORTS_DATE_LABEL: 'Date',
   REPORTS_START_LABEL: 'From',
   REPORTS_END_LABEL: 'To',
   REPORTS_QUICK_7D: 'Last 7 days',

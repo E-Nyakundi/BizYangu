@@ -27,11 +27,28 @@ import PinLockScreen from '@/components/PinLockScreen'
 import { isPinEnabledOnDevice, isSessionUnlocked, setSessionUnlocked } from '@/lib/device-lock'
 import type { UserProfile } from '@/lib/types'
 
-const NAV_ITEMS = [
+const NAV_ITEMS: Array<{
+  href: string
+  label: string
+  icon: string
+  roles: string[] | null
+  children?: Array<{ href: string; label: string; icon: string; roles: string[] | null }>
+}> = [
   { href: '/dashboard', label: COPY.NAV_HOME, icon: '⊞', roles: null },
   { href: '/sell', label: COPY.NAV_SELL, icon: '🛒', roles: null },
   { href: '/stock', label: COPY.NAV_STOCK, icon: '📦', roles: null },
-  { href: '/reports', label: COPY.NAV_REPORTS, icon: '📊', roles: null },
+  {
+    href: '/reports', label: COPY.NAV_REPORTS, icon: '📊', roles: null,
+    // E19: Payments/Creditors nest under Reports on desktop (always
+    // expanded, Reddit-thread-style connector — see .nav-nested in
+    // globals.css) instead of holding their own top-level nav slots.
+    // Same OWNER/MANAGER gate they carried as standalone nav items,
+    // just applied per-child now.
+    children: [
+      { href: '/payments', label: COPY.NAV_PAYMENTS, icon: '💳', roles: ['OWNER', 'MANAGER'] },
+      { href: '/creditors', label: COPY.NAV_CREDITORS, icon: '🤝', roles: ['OWNER', 'MANAGER'] },
+    ],
+  },
   { href: '/settings', label: COPY.NAV_SETTINGS, icon: '⚙', roles: null },
 ]
 
@@ -182,27 +199,61 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Nav links */}
         {visibleNavItems.map((item) => {
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
+          const visibleChildren = (item.children ?? []).filter(
+            (child) => child.roles === null || child.roles.includes(user.role)
+          )
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--sp-3)',
-                padding: 'var(--sp-3) var(--sp-4)',
-                color: active ? 'var(--color-teal)' : 'var(--color-muted)',
-                fontWeight: active ? 600 : 400,
-                fontSize: 'var(--fs-sm)',
-                borderLeft: active ? '2px solid var(--color-teal)' : '2px solid transparent',
-                background: active ? 'rgba(0,229,196,0.06)' : 'transparent',
-                transition: 'all 0.15s',
-                textDecoration: 'none',
-              }}
-            >
-              <span>{item.icon}</span>
-              {item.label}
-            </Link>
+            <div key={item.href}>
+              <Link
+                href={item.href}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--sp-3)',
+                  padding: 'var(--sp-3) var(--sp-4)',
+                  color: active ? 'var(--color-teal)' : 'var(--color-muted)',
+                  fontWeight: active ? 600 : 400,
+                  fontSize: 'var(--fs-sm)',
+                  borderLeft: active ? '2px solid var(--color-teal)' : '2px solid transparent',
+                  background: active ? 'rgba(0,229,196,0.06)' : 'transparent',
+                  transition: 'all 0.15s',
+                  textDecoration: 'none',
+                }}
+              >
+                <span>{item.icon}</span>
+                {item.label}
+              </Link>
+
+              {/* Reddit-thread-style nested children (Payments/Creditors
+                  under Reports) — always expanded on desktop, never
+                  collapsed behind a toggle. See .nav-nested, globals.css. */}
+              {visibleChildren.length > 0 && (
+                <div className="nav-nested">
+                  {visibleChildren.map((child) => {
+                    const childActive = pathname === child.href || pathname.startsWith(child.href + '/')
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 'var(--sp-2)',
+                          padding: 'var(--sp-2) var(--sp-3)',
+                          color: childActive ? 'var(--color-teal)' : 'var(--color-muted)',
+                          fontWeight: childActive ? 600 : 400,
+                          fontSize: 'var(--fs-xs)',
+                          textDecoration: 'none',
+                        }}
+                      >
+                        <span>{child.icon}</span>
+                        {child.label}
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           )
         })}
 

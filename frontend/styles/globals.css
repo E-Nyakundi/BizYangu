@@ -418,3 +418,35 @@ h1, h2, h3, h4, h5, h6 {
   border-color: var(--color-teal);
   color: var(--color-teal);
 }
+
+/* ────────────────────────────────────────────
+   RESPONSIVE VISIBILITY UTILITIES
+   Same breakpoint as the app nav (767px / 768px).
+   Used by the Reports/Payments/Creditors nesting:
+   desktop shows an always-expanded nested tree in the
+   side nav; mobile shows a collapsed-by-default accordion
+   inline on the Reports page instead.
+   ──────────────────────────────────────────── */
+
+.desktop-only { display: block; }
+.mobile-only { display: none; }
+
+@media (max-width: 767px) {
+  .desktop-only { display: none !important; }
+  .mobile-only { display: block !important; }
+}
+
+/* ────────────────────────────────────────────
+   NESTED NAV (Reddit-thread style)
+   A vertical connector line running down the left edge of a
+   nested group, with each child indented off it — same visual
+   language as Reddit's nested comment threads.
+   ──────────────────────────────────────────── */
+
+.nav-nested {
+  margin-left: 27px;
+  padding-left: var(--sp-3);
+  border-left: 1px solid var(--surface-3);
+  display: flex;
+  flex-direction: column;
+}
