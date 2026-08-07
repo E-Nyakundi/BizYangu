@@ -1,8 +1,7 @@
 {
   "_notes": [
     "Shared unit vocabulary referenced by all templates.",
-    "'colloquial' lists local naming variants worth accepting as synonyms",
-    "in product entry (e.g. so 'debe' and '20L tin' resolve to the same unit).",
+    "'colloquial' lists local naming variants worth accepting as synonyms in product entry.",
     "This list is a draft — colloquial terms especially need native review."
   ],
   "units": [
@@ -19,8 +18,7 @@
     { "id": "bale", "label": "Bale", "colloquial": [] },
     { "id": "sack_50kg", "label": "50kg sack/bag", "colloquial": ["gunia"] },
     { "id": "tonne", "label": "Tonne", "colloquial": ["ton"] },
-    { "id": "debe_20l", "label": "Debe (20L tin)", "colloquial": ["debe", "tin"] },
-    { "id": "gorogoro", "label": "Gorogoro (~2kg tin measure)", "colloquial": ["goro"] },
+    { "id": "gorogoro", "label": "Gorogoro (standard tin measure)", "colloquial": ["goro"] },
     { "id": "stick", "label": "Stick", "colloquial": [] },
     { "id": "dozen", "label": "Dozen", "colloquial": ["dazani"] },
     { "id": "roll", "label": "Roll", "colloquial": [] },
