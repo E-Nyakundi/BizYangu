@@ -52,3 +52,18 @@ redundant and can race against the container's own auto-migrate.
 your side: open `deploy.ps1`, remove the line running
 `manage.py migrate` after `up -d --build`, keep the `build` + `up -d`
 step only.
+
+## 5. Dockerfile.prod build failure (found from your build log)
+`collectstatic` runs at **image build time**, before `.env.production`
+is ever read — that file only loads at `docker compose up`. The
+Dockerfile already had `ENV ... build-time-placeholder-overridden-at-runtime`
+lines for `SECRET_KEY`, `DB_PASSWORD`, `ALLOWED_HOSTS`, and
+`CORS_ALLOWED_ORIGINS` for exactly this reason, but `FRONTEND_URL`
+was never added to that list when it became required. Added:
+```
+ENV FRONTEND_URL=build-time-placeholder-overridden-at-runtime
+```
+Drop-in replace: `backend/Dockerfile.prod`. Checked `production.py` for
+any other `config()` calls with no default — `ALLOWED_HOSTS` and
+`CORS_ALLOWED_ORIGINS` are the only other required ones, and both
+already had placeholders, so this is the only gap.
