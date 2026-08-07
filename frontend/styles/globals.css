@@ -118,7 +118,7 @@ body {
 }
 
 /* ────────────────────────────────────────────
-   GRID OVERLAY & CROSSHAIR MARKS
+   GRID OVERLAY
    ──────────────────────────────────────────── */
 
 body::before {
@@ -132,39 +132,6 @@ body::before {
   pointer-events: none;
   z-index: 1;
 }
-
-.crosshair {
-  position: fixed;
-  width: 14px;
-  height: 14px;
-  z-index: 2;
-  pointer-events: none;
-  opacity: 0.5;
-}
-
-.crosshair::before,
-.crosshair::after {
-  content: '';
-  position: absolute;
-  background: var(--color-teal-dim);
-}
-
-.crosshair::before {
-  width: 100%;
-  height: 1px;
-  top: 50%;
-}
-
-.crosshair::after {
-  width: 1px;
-  height: 100%;
-  left: 50%;
-}
-
-.ch-tl { top: 12px; left: 12px; }
-.ch-tr { top: 12px; right: 12px; }
-.ch-bl { bottom: 12px; left: 12px; }
-.ch-br { bottom: 12px; right: 12px; }
 
 a {
   color: var(--color-teal);

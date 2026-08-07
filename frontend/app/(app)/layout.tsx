@@ -157,14 +157,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', minHeight: '100dvh', background: 'var(--surface-0)' }}>
 
-      {/* Crosshair corner marks — decorative only, per LN Design System's
-          "always show crosshair / grid marks" convention. Fixed positioning
-          means they sit relative to the viewport regardless of scroll. */}
-      <div className="crosshair ch-tl" aria-hidden="true" />
-      <div className="crosshair ch-tr" aria-hidden="true" />
-      <div className="crosshair ch-bl" aria-hidden="true" />
-      <div className="crosshair ch-br" aria-hidden="true" />
-
       {/* ── Side nav (desktop, ≥768px) ── */}
       <nav style={{
         width: 200,
