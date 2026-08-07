@@ -8,6 +8,12 @@ DEBUG = False
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS').split(',')
 
+# Used to build absolute links back to the frontend — currently only the
+# staff invite URL (apps/accounts/views.py:invite_staff). Required, no
+# default: if this is missing in production, invite links should fail
+# loudly at request time, not silently point at localhost.
+FRONTEND_URL = config('FRONTEND_URL')
+
 CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS').split(',')
 CORS_ALLOW_CREDENTIALS = True
 
