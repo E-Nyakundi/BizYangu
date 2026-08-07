@@ -146,22 +146,27 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs
+          E19 note (pre-pilot backlog item 22): Payments/Creditors — the
+          other two screens folded under this section's umbrella via the
+          nav/accordion above — carry icons (💳 🤝). These five report tabs
+          previously didn't, which read as inconsistent. Decision: icons
+          everywhere, so every tab here gets one too, same treatment. */}
       <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-4)', flexWrap: 'wrap' }}>
         {([
-          ['daily', COPY.REPORTS_TAB_DAILY],
-          ['period', COPY.REPORTS_TAB_PERIOD],
-          ['growth', COPY.REPORTS_TAB_GROWTH],
-          ['products', COPY.REPORTS_TAB_PRODUCTS],
-          ['losses', COPY.REPORTS_TAB_LOSSES],
-        ] as [Tab, string][]).map(([key, label]) => (
+          ['daily', '📅', COPY.REPORTS_TAB_DAILY],
+          ['period', '🗓️', COPY.REPORTS_TAB_PERIOD],
+          ['growth', '📈', COPY.REPORTS_TAB_GROWTH],
+          ['products', '🏷️', COPY.REPORTS_TAB_PRODUCTS],
+          ['losses', '📉', COPY.REPORTS_TAB_LOSSES],
+        ] as [Tab, string, string][]).map(([key, icon, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
             className={tab === key ? 'btn-primary' : 'btn-ghost'}
-            style={{ fontSize: 'var(--fs-xs)' }}
+            style={{ fontSize: 'var(--fs-xs)', display: 'flex', alignItems: 'center', gap: 'var(--sp-1)' }}
           >
-            {label}
+            <span aria-hidden="true">{icon}</span> {label}
           </button>
         ))}
       </div>

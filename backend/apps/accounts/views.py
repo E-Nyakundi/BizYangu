@@ -323,7 +323,8 @@ def logout(request):
 def me(request):
     """
     GET  /api/v1/auth/me/   — Current user profile + business demo state.
-    PATCH /api/v1/auth/me/  — Update name.
+    PATCH /api/v1/auth/me/  — Update first_name/last_name/email. Used by the
+    /setup "About you" step, /join's name-capture step, and Settings.
     """
     if request.method == 'GET':
         return Response(UserProfileSerializer(request.user).data)

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useAuthStore, logout, apiErrorMessage } from '@/lib/auth'
+import { useAuthStore, logout, apiErrorMessage, updateMe, type UpdateMePayload } from '@/lib/auth'
 import { unregisterPushNotifications } from '@/lib/push'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
@@ -31,6 +31,55 @@ export default function SettingsPage() {
 
   const isOwner = user?.role === 'OWNER'
   const isOwnerOrManager = user?.role === 'OWNER' || user?.role === 'MANAGER'
+
+  // ── Account details (name/email) ────────────────────────────────────────
+  // Previously nothing here beyond a read-only name/phone/role — first/last
+  // name and email weren't even fields on the account, so there was nothing
+  // to edit. Anyone can edit their own name; email is really only meaningful
+  // for the OWNER (collected on /setup) but any role can add one.
+  const [editingAccount, setEditingAccount] = useState(false)
+  const [accountForm, setAccountForm] = useState<UpdateMePayload>({})
+  const [accountSaving, setAccountSaving] = useState(false)
+  const [accountMsg, setAccountMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null)
+
+  function startEditingAccount() {
+    if (!user) return
+    setAccountForm({
+      first_name: user.first_name ?? '',
+      last_name: user.last_name ?? '',
+      email: user.email ?? '',
+    })
+    setAccountMsg(null)
+    setEditingAccount(true)
+  }
+
+  async function handleSaveAccount(e: React.FormEvent) {
+    e.preventDefault()
+    if (!accountForm.first_name?.trim()) {
+      setAccountMsg({ type: 'error', text: COPY.ERRORS.FIRST_NAME_REQUIRED })
+      return
+    }
+    if (!accountForm.last_name?.trim()) {
+      setAccountMsg({ type: 'error', text: COPY.ERRORS.LAST_NAME_REQUIRED })
+      return
+    }
+    setAccountSaving(true)
+    setAccountMsg(null)
+    try {
+      const updated = await updateMe({
+        first_name: accountForm.first_name?.trim(),
+        last_name: accountForm.last_name?.trim(),
+        email: accountForm.email?.trim() ? accountForm.email.trim() : null,
+      })
+      setUser(updated)
+      setEditingAccount(false)
+      setAccountMsg({ type: 'ok', text: COPY.SETTINGS_ACCOUNT_UPDATED })
+    } catch (err) {
+      setAccountMsg({ type: 'error', text: apiErrorMessage(err, COPY.SETTINGS_ACCOUNT_UPDATE_ERROR) })
+    } finally {
+      setAccountSaving(false)
+    }
+  }
 
   useEffect(() => {
     getTheme().then(setThemeState)
@@ -197,19 +246,75 @@ export default function SettingsPage() {
 
       {/* User info */}
       <div className="card" style={{ marginBottom: 'var(--sp-4)' }}>
-        <p className="mono" style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-2)' }}>{COPY.SETTINGS_ACCOUNT_LABEL}</p>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-1)' }}>
-          <span style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-xs)' }}>{COPY.SETTINGS_NAME}</span>
-          <span style={{ fontSize: 'var(--fs-xs)' }}>{user?.name}</span>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-2)' }}>
+          <p className="mono" style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>{COPY.SETTINGS_ACCOUNT_LABEL}</p>
+          {!editingAccount && (
+            <button className="btn-ghost" style={{ fontSize: 'var(--fs-xs)' }} onClick={startEditingAccount}>
+              {COPY.SETTINGS_EDIT_ACCOUNT}
+            </button>
+          )}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-1)' }}>
-          <span style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-xs)' }}>{COPY.SETTINGS_PHONE}</span>
-          <span className="mono" style={{ fontSize: 'var(--fs-xs)' }}>{user?.phone_number}</span>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-xs)' }}>{COPY.SETTINGS_ROLE}</span>
-          <span className="mono" style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-teal)' }}>{user?.role}</span>
-        </div>
+
+        {editingAccount ? (
+          <form onSubmit={handleSaveAccount}>
+            <label style={{ display: 'block', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-1)' }}>{COPY.SETUP_FIRST_NAME_LABEL}</label>
+            <input
+              className="input"
+              value={accountForm.first_name ?? ''}
+              onChange={(e) => setAccountForm({ ...accountForm, first_name: e.target.value })}
+              style={{ marginBottom: 'var(--sp-3)' }}
+              required
+            />
+            <label style={{ display: 'block', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-1)' }}>{COPY.SETUP_LAST_NAME_LABEL}</label>
+            <input
+              className="input"
+              value={accountForm.last_name ?? ''}
+              onChange={(e) => setAccountForm({ ...accountForm, last_name: e.target.value })}
+              style={{ marginBottom: 'var(--sp-3)' }}
+              required
+            />
+            <label style={{ display: 'block', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-1)' }}>{COPY.SETTINGS_EMAIL}</label>
+            <input
+              className="input"
+              type="email"
+              value={accountForm.email ?? ''}
+              onChange={(e) => setAccountForm({ ...accountForm, email: e.target.value })}
+              style={{ marginBottom: 'var(--sp-3)' }}
+            />
+            {accountMsg && (
+              <p style={{ fontSize: 'var(--fs-xs)', color: accountMsg.type === 'ok' ? 'var(--color-teal)' : 'var(--color-error)', marginBottom: 'var(--sp-3)' }}>
+                {accountMsg.text}
+              </p>
+            )}
+            <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+              <button type="submit" className="btn-primary" disabled={accountSaving} style={{ fontSize: 'var(--fs-xs)' }}>
+                {accountSaving ? COPY.SETTINGS_ACCOUNT_SAVING : COPY.SETTINGS_ACCOUNT_SAVE}
+              </button>
+              <button type="button" className="btn-ghost" disabled={accountSaving} style={{ fontSize: 'var(--fs-xs)' }} onClick={() => setEditingAccount(false)}>
+                {COPY.SETTINGS_ACCOUNT_CANCEL}
+              </button>
+            </div>
+          </form>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-1)' }}>
+              <span style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-xs)' }}>{COPY.SETTINGS_NAME}</span>
+              <span style={{ fontSize: 'var(--fs-xs)' }}>{user?.name || COPY.SETTINGS_NAME_NOT_SET}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-1)' }}>
+              <span style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-xs)' }}>{COPY.SETTINGS_EMAIL}</span>
+              <span className="mono" style={{ fontSize: 'var(--fs-xs)' }}>{user?.email || COPY.SETTINGS_EMAIL_NOT_SET}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-1)' }}>
+              <span style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-xs)' }}>{COPY.SETTINGS_PHONE}</span>
+              <span className="mono" style={{ fontSize: 'var(--fs-xs)' }}>{user?.phone_number}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-xs)' }}>{COPY.SETTINGS_ROLE}</span>
+              <span className="mono" style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-teal)' }}>{user?.role}</span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Business info */}

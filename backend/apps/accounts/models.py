@@ -41,7 +41,22 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     phone_number = models.CharField(max_length=20, unique=True)  # E.164 format
-    name = models.CharField(max_length=150)
+    name = models.CharField(max_length=150)  # kept in sync with first_name/last_name — see save()
+
+    # First/last name capture (pre-pilot backlog: "user only recognizable by
+    # number and title"). `name` above stays the single field every existing
+    # display/report/serializer already reads (settings, staff list, loss
+    # report's by_employee, created_by.name, etc.) — save() below derives it
+    # from these two so nothing else in the codebase has to change.
+    first_name = models.CharField(max_length=75, blank=True, default='')
+    last_name = models.CharField(max_length=75, blank=True, default='')
+
+    # Owner-only in practice (collected on the /setup "About you" step),
+    # but not enforced at the model level — a CASHIER/MANAGER could pick
+    # one up later from Settings, so it's just optional + unique here.
+    # null=True so multiple blank rows don't collide on the unique index.
+    email = models.EmailField(blank=True, null=True, unique=True)
+
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.CASHIER)
 
     # FK to Business — nullable on creation (user exists before business)
@@ -80,6 +95,17 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return f'{self.name} ({self.phone_number})'
+
+    def save(self, *args, **kwargs):
+        # Keep the legacy single `name` field in sync whenever first/last
+        # name are set, so every existing read of `.name` (settings,
+        # StaffMemberSerializer, loss report by_employee, created_by.name
+        # on stock movements, WhatsApp EOD text) picks up the real name
+        # without those call sites needing to know first/last exist.
+        combined = f'{self.first_name} {self.last_name}'.strip()
+        if combined:
+            self.name = combined
+        super().save(*args, **kwargs)
 
     @property
     def has_pin(self) -> bool:

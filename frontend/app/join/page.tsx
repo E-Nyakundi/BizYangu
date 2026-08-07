@@ -17,12 +17,23 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { requestOtp, verifyOtp, useAuthStore, apiErrorMessage } from '@/lib/auth'
+import { requestOtp, verifyOtp, updateMe, useAuthStore, apiErrorMessage } from '@/lib/auth'
 import { acceptInvite } from '@/lib/business'
 import Deepfield from '@/components/deepfield'
 import { COPY } from '@/lib/copy'
+import type { UserProfile } from '@/lib/types'
 
-type Step = 'loading' | 'phone' | 'otp' | 'confirm' | 'blocked' | 'success' | 'invalid'
+type Step = 'loading' | 'phone' | 'otp' | 'name' | 'confirm' | 'blocked' | 'success' | 'invalid'
+
+// Nothing anywhere previously collected a name for staff joining via an
+// invite link — the account showed up in the owner's staff list and in
+// Settings as phone + role only. This step closes that gap: anyone
+// without a first/last name on file gets asked before the invite is
+// redeemed, whether they're brand new or (rarer) an existing businessless
+// account that never set one.
+function needsName(u: UserProfile | null): boolean {
+  return !!u && (!u.first_name?.trim() || !u.last_name?.trim())
+}
 
 export default function JoinPage() {
   return (
@@ -49,6 +60,9 @@ function JoinPageInner() {
   const [resendIn, setResendIn] = useState(0)
   const resendTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+
   useEffect(() => {
     if (!isInitialized) hydrate()
   }, [isInitialized, hydrate])
@@ -61,6 +75,8 @@ function JoinPageInner() {
       setStep('phone')
     } else if (user.business_id) {
       setStep('blocked')
+    } else if (needsName(user)) {
+      setStep('name')
     } else {
       setStep('confirm')
     }
@@ -106,10 +122,36 @@ function JoinPageInner() {
         setStep('blocked')
         return
       }
+      if (needsName(verifiedUser)) {
+        setStep('name')
+        return
+      }
       await redeemInvite()
     } catch (err) {
       setError(apiErrorMessage(err, COPY.ERRORS.INVALID_OTP))
     } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  async function handleSubmitName(e: React.FormEvent) {
+    e.preventDefault()
+    if (!firstName.trim()) {
+      setError(COPY.ERRORS.FIRST_NAME_REQUIRED)
+      return
+    }
+    if (!lastName.trim()) {
+      setError(COPY.ERRORS.LAST_NAME_REQUIRED)
+      return
+    }
+    setError('')
+    setIsSubmitting(true)
+    try {
+      const updated = await updateMe({ first_name: firstName.trim(), last_name: lastName.trim() })
+      setUser(updated)
+      await redeemInvite()
+    } catch (err) {
+      setError(apiErrorMessage(err))
       setIsSubmitting(false)
     }
   }
@@ -162,7 +204,7 @@ function JoinPageInner() {
                 : COPY.JOIN_SUBTITLE_GENERIC}
             </p>
           )}
-          {(step === 'phone' || step === 'otp' || step === 'confirm') && (
+          {(step === 'phone' || step === 'otp' || step === 'name' || step === 'confirm') && (
             <p className="mono" style={{ color: 'var(--color-teal)', marginTop: 'var(--sp-2)', fontSize: 'var(--fs-xs)' }}>
               {COPY.JOIN_ROLE_PREFIX}: {roleLabel}
             </p>
@@ -189,6 +231,42 @@ function JoinPageInner() {
           <p style={{ color: 'var(--color-teal)', fontSize: 'var(--fs-sm)', textAlign: 'center' }}>
             {COPY.JOIN_SUCCESS}
           </p>
+        )}
+
+        {step === 'name' && (
+          <form onSubmit={handleSubmitName}>
+            <h2 style={{ fontSize: 'var(--fs-lg)', textAlign: 'center', marginBottom: 'var(--sp-2)' }}>{COPY.JOIN_NAME_TITLE}</h2>
+            <p style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-sm)', marginBottom: 'var(--sp-4)', textAlign: 'center' }}>
+              {COPY.JOIN_NAME_HELP}
+            </p>
+            <label htmlFor="firstName" style={{ display: 'block', marginBottom: 'var(--sp-2)', fontSize: 'var(--fs-sm)' }}>
+              {COPY.JOIN_FIRST_NAME_LABEL}
+            </label>
+            <input
+              id="firstName"
+              className="input"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              autoFocus
+              required
+              style={{ marginBottom: 'var(--sp-4)' }}
+            />
+            <label htmlFor="lastName" style={{ display: 'block', marginBottom: 'var(--sp-2)', fontSize: 'var(--fs-sm)' }}>
+              {COPY.JOIN_LAST_NAME_LABEL}
+            </label>
+            <input
+              id="lastName"
+              className="input"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              required
+              style={{ marginBottom: 'var(--sp-2)' }}
+            />
+            {error && <p style={{ color: 'var(--color-error)', fontSize: 'var(--fs-sm)', marginTop: 'var(--sp-3)' }}>{error}</p>}
+            <button type="submit" className="btn-primary" disabled={isSubmitting} style={{ width: '100%', justifyContent: 'center', marginTop: 'var(--sp-5)' }}>
+              {isSubmitting ? '…' : COPY.JOIN_NAME_CONTINUE}
+            </button>
+          </form>
         )}
 
         {step === 'confirm' && (

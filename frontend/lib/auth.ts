@@ -28,6 +28,20 @@ export async function fetchMe(): Promise<UserProfile> {
   return data
 }
 
+export interface UpdateMePayload {
+  first_name?: string
+  last_name?: string
+  email?: string | null
+}
+
+// Used by the /setup "About you" step, /join's name-capture step, and
+// Settings' account-details edit. `name` itself is never sent — the
+// backend derives it from first_name/last_name.
+export async function updateMe(payload: UpdateMePayload): Promise<UserProfile> {
+  const { data } = await api.patch('/auth/me/', payload)
+  return data
+}
+
 export async function logout(): Promise<void> {
   await api.post('/auth/logout/')
 }
