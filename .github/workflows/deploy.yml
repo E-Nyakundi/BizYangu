@@ -1,0 +1,31 @@
+# .github/workflows/deploy.yml
+#
+# Auto-deploys the backend whenever `production` is pushed to.
+# Mirrors what Vercel already does for the frontend — push, and it's live,
+# no manual SSH/tar/scp step needed.
+#
+# Requires three repo secrets (Settings -> Secrets and variables -> Actions):
+#   VM_SSH_KEY  - private half of the gha_deploy keypair generated on the VM
+#   VM_HOST     - the VM's IP or hostname
+#   VM_USER     - ubuntu
+
+name: Deploy to VM
+
+on:
+  push:
+    branches: [production]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH into VM and deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd ~/bizyangu
+            git pull origin production
+            docker compose -f docker-compose.prod.yml up -d --build
