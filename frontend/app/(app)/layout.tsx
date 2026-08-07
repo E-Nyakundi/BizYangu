@@ -4,7 +4,16 @@
  * BizYangu — (app) layout.
  * Auth guard + bottom nav on mobile / side nav on wider screens.
  * Demo expiry banner when days_remaining <= 3.
- * "Payments" and "Creditors" nav items visible to OWNER and MANAGER only.
+ *
+ * E19 (pre-pilot backlog): the nav used to carry 7 items including
+ * "Payments" and "Creditors" — too many for a mobile bottom nav to hold
+ * comfortably. Both are owner/manager-only operational screens (M-Pesa
+ * reconciliation, credit tracking), not reports, so they're not tab
+ * panes inside Reports — they stay full pages. Their entry points now
+ * live as a "Manage" quick-link row on the Reports page (owner/manager
+ * only, same as before), and the nav itself carries 5 items for
+ * everyone. Routes (/payments, /creditors) are unchanged, so nothing
+ * that already links directly to them breaks.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -23,8 +32,6 @@ const NAV_ITEMS = [
   { href: '/sell', label: COPY.NAV_SELL, icon: '🛒', roles: null },
   { href: '/stock', label: COPY.NAV_STOCK, icon: '📦', roles: null },
   { href: '/reports', label: COPY.NAV_REPORTS, icon: '📊', roles: null },
-  { href: '/payments', label: COPY.NAV_PAYMENTS, icon: '💳', roles: ['OWNER', 'MANAGER'] as string[] },
-  { href: '/creditors', label: COPY.NAV_CREDITORS, icon: '🤝', roles: ['OWNER', 'MANAGER'] as string[] },
   { href: '/settings', label: COPY.NAV_SETTINGS, icon: '⚙', roles: null },
 ]
 

@@ -13,6 +13,7 @@ import Link from 'next/link'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
+import { useAuthStore } from '@/lib/auth'
 import { COPY } from '@/lib/copy'
 import { shareText } from '@/lib/share-text'
 import {
@@ -56,6 +57,9 @@ function StatRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function ReportsPage() {
+  const user = useAuthStore((s) => s.user)
+  const canManage = user?.role === 'OWNER' || user?.role === 'MANAGER'
+
   const [tab, setTab] = useState<Tab>('daily')
 
   const [date, setDate] = useState(todayStr())
@@ -102,6 +106,27 @@ export default function ReportsPage() {
         <h1 style={{ fontSize: 'var(--fs-lg)' }}>{COPY.REPORTS_TITLE}</h1>
         <Link href="/dashboard" className="btn-ghost" style={{ fontSize: 'var(--fs-xs)' }}>{COPY.REPORTS_GO_HOME}</Link>
       </div>
+
+      {/* E19: Payments/Creditors moved out of the main nav bar (mobile
+          overload) — their entry points live here instead, owner/manager
+          only, same gate the nav items used to carry. Full pages, not
+          folded into the report tabs below, since they're operational
+          screens (M-Pesa reconciliation, credit settlement), not reports. */}
+      {canManage && (
+        <div style={{ marginBottom: 'var(--sp-5)' }}>
+          <p className="mono" style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-2)' }}>
+            {COPY.REPORTS_MANAGE_TITLE}
+          </p>
+          <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+            <Link href="/payments" className="btn-ghost" style={{ fontSize: 'var(--fs-xs)', display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+              <span>💳</span> {COPY.REPORTS_MANAGE_PAYMENTS}
+            </Link>
+            <Link href="/creditors" className="btn-ghost" style={{ fontSize: 'var(--fs-xs)', display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+              <span>🤝</span> {COPY.REPORTS_MANAGE_CREDITORS}
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 'var(--sp-2)', marginBottom: 'var(--sp-4)', flexWrap: 'wrap' }}>

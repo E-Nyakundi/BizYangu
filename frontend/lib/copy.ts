@@ -602,7 +602,9 @@ export const COPY = {
   REPORTS_TAB_PERIOD: 'Period',
   REPORTS_TAB_PRODUCTS: 'Products',
   REPORTS_TAB_LOSSES: 'Losses',
-  REPORTS_DATE_LABEL: 'Date',
+  REPORTS_MANAGE_TITLE: 'Manage',
+  REPORTS_MANAGE_PAYMENTS: 'Payments — M-Pesa reconciliation',
+  REPORTS_MANAGE_CREDITORS: 'Creditors — who owes what',
   REPORTS_START_LABEL: 'From',
   REPORTS_END_LABEL: 'To',
   REPORTS_QUICK_7D: 'Last 7 days',
@@ -831,6 +833,7 @@ export const COPY_SW = {
   NAV_STOCK: 'Hisa',
   NAV_REPORTS: 'Ripoti',
   NAV_PAYMENTS: 'Malipo',
+  NAV_CREDITORS: 'Wadaiwa',
   NAV_SETTINGS: 'Mipangilio',
 
   // Auth & Login
@@ -1345,6 +1348,9 @@ export const COPY_SW = {
   REPORTS_TAB_PERIOD: 'Kipindi',
   REPORTS_TAB_PRODUCTS: 'Bidhaa',
   REPORTS_TAB_LOSSES: 'Hasara',
+  REPORTS_MANAGE_TITLE: 'Simamia',
+  REPORTS_MANAGE_PAYMENTS: 'Malipo — upatanishi wa M-Pesa',
+  REPORTS_MANAGE_CREDITORS: 'Wadaiwa — nani anadaiwa nini',
   REPORTS_DATE_LABEL: 'Tarehe',
   REPORTS_START_LABEL: 'Kutoka',
   REPORTS_END_LABEL: 'Hadi',
