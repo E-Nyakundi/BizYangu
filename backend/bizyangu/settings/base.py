@@ -222,6 +222,26 @@ MPESA_CALLBACK_IP_ALLOWLIST_DISABLED = config(
     'MPESA_CALLBACK_IP_ALLOWLIST_DISABLED', default=False, cast=bool,
 )
 
+# M-Pesa Daraja — company shortcode (BizYangu's OWN subscription
+# billing, e.g. Ksh 800/month from each business owner to us). This is
+# a completely separate Daraja app from MPESA_* above, which is the
+# shared shortcode businesses use to receive payment from THEIR
+# customers. Keeping them separate means a mistake in one flow (wrong
+# shortcode, revoked credentials) can never silently misroute money
+# meant for the other.
+MPESA_COMPANY_CONSUMER_KEY = config('MPESA_COMPANY_CONSUMER_KEY', default='')
+MPESA_COMPANY_CONSUMER_SECRET = config('MPESA_COMPANY_CONSUMER_SECRET', default='')
+MPESA_COMPANY_SHORTCODE = config('MPESA_COMPANY_SHORTCODE', default='')
+MPESA_COMPANY_PASSKEY = config('MPESA_COMPANY_PASSKEY', default='')
+MPESA_COMPANY_CALLBACK_URL = config('MPESA_COMPANY_CALLBACK_URL', default='')
+MPESA_COMPANY_ENV = config('MPESA_COMPANY_ENV', default='sandbox')  # 'sandbox' or 'production'
+
+# Fernet key encrypting BusinessMpesaCredentials.consumer_secret/passkey
+# at rest (see apps/payments/fields.py). Deliberately separate from
+# SECRET_KEY so rotating one never breaks the other. Generate with:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+MPESA_CREDENTIALS_ENCRYPTION_KEY = config('MPESA_CREDENTIALS_ENCRYPTION_KEY', default='')
+
 # Firebase Cloud Messaging — push notifications (low-stock alerts).
 # Paste the full service-account JSON as a single-line string in .env.
 # Left empty until you create a Firebase project; notifications app

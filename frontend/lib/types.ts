@@ -322,3 +322,40 @@ export interface MPesaTransaction {
 export type MpesaWsEvent =
   | { type: 'stk_result'; checkout_request_id: string; status: StkStatus; transaction_id: string; mpesa_receipt: string | null }
   | { type: 'payment_received'; mpesa_transaction_id: string; amount: string; phone: string; is_matched: boolean }
+  | { type: 'subscription_result'; checkout_request_id: string; status: StkStatus; mpesa_receipt: string | null }
+
+// ── Subscription billing (company shortcode — business paying BizYangu) ─────
+
+export interface SubscriptionPayment {
+  id: string
+  business: string
+  amount: string
+  months: number
+  checkout_request_id: string
+  merchant_request_id: string
+  phone_number: string
+  mpesa_receipt_number: string | null
+  status: StkStatus
+  result_code: string | null
+  result_desc: string | null
+  created_at: string
+  completed_at: string | null
+}
+
+// ── Business's own M-Pesa credentials (per-business till/paybill) ───────────
+
+export type MpesaTillType = 'PAYBILL' | 'BUY_GOODS'
+export type MpesaCredentialsEnv = 'sandbox' | 'production'
+
+export interface BusinessMpesaCredentials {
+  till_type: MpesaTillType
+  shortcode: string
+  // consumer_key is never sent back in full — only the masked form.
+  consumer_key_masked: string
+  env: MpesaCredentialsEnv
+  is_active: boolean
+  is_configured: boolean
+  verified_at: string | null
+  updated_at: string
+  detail?: string
+}

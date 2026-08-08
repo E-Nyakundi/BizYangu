@@ -9,4 +9,23 @@ urlpatterns = [
     path('mpesa/c2b/validation/', views.c2b_validation, name='mpesa-c2b-validation'),
     path('mpesa/transactions/', views.mpesa_transaction_list, name='mpesa-transactions'),
     path('mpesa/reconcile/', views.reconcile, name='mpesa-reconcile'),
+
+    # Subscription billing (company shortcode — business paying BizYangu)
+    path('mpesa/subscription/stk-push/', views.initiate_subscription_payment, name='mpesa-subscription-stk-push'),
+    path(
+        'mpesa/subscription/stk-push/<str:checkout_request_id>/status/',
+        views.subscription_payment_status, name='mpesa-subscription-stk-status',
+    ),
+    path('mpesa/subscription/callback/', views.subscription_callback, name='mpesa-subscription-callback'),
+
+    # Per-business M-Pesa credentials (owner's own till/paybill)
+    path('mpesa/business-credentials/', views.business_mpesa_credentials, name='mpesa-business-credentials'),
+    path(
+        'mpesa/business-credentials/verify/',
+        views.verify_business_mpesa_credentials, name='mpesa-business-credentials-verify',
+    ),
+    path(
+        'mpesa/business-credentials/deactivate/',
+        views.deactivate_business_mpesa_credentials, name='mpesa-business-credentials-deactivate',
+    ),
 ]

@@ -134,6 +134,20 @@ MESSAGES = {
     'STK_REQUEST_NOT_FOUND': 'Request not found.',
     'MPESA_TRANSACTION_NOT_FOUND': 'M-Pesa transaction not found.',
 
+    # Subscription billing (company M-Pesa, not a business sale)
+    'SUBSCRIPTION_PAYMENT_SENT': 'Payment prompt sent to phone.',
+    'SUBSCRIPTION_PAYMENT_FAILED': 'Unable to send payment prompt. Please try again.',
+    'SUBSCRIPTION_PAYMENT_ALREADY_PENDING': 'A subscription payment request is already pending.',
+    'SUBSCRIPTION_PAYMENT_NOT_FOUND': 'Subscription payment not found.',
+    'SUBSCRIPTION_PAYMENT_CONFIRMED': 'Subscription payment confirmed.',
+
+    # Business M-Pesa credentials (per-business Daraja app)
+    'MPESA_CREDENTIALS_SAVED': 'M-Pesa settings saved.',
+    'MPESA_CREDENTIALS_NOT_CONFIGURED': 'M-Pesa credentials are not fully filled in yet.',
+    'MPESA_CREDENTIALS_VERIFIED': 'M-Pesa credentials verified and activated.',
+    'MPESA_CREDENTIALS_VERIFY_FAILED': 'Could not verify these M-Pesa credentials. Please check them and try again.',
+    'MPESA_CREDENTIALS_DEACTIVATED': 'Your own M-Pesa till has been switched off — sales will use the shared BizYangu number again.',
+
     # Notifications & Push
     'DEVICE_REGISTERED': 'Device registered for notifications.',
     'DEVICE_UNREGISTERED': 'Device unregistered.',
@@ -319,6 +333,20 @@ MESSAGES_SW = {
     'STK_REQUEST_ALREADY_PENDING': 'Ombi la STK Push tayari linasubiriwa kwa muamala huu.',
     'STK_REQUEST_NOT_FOUND': 'Ombi halijapatikana.',
     'MPESA_TRANSACTION_NOT_FOUND': 'Muamala wa M-Pesa haujapatikana.',
+
+    # Subscription billing (company M-Pesa, not a business sale)
+    'SUBSCRIPTION_PAYMENT_SENT': 'Mwaliko wa malipo imetumwa kwa simu.',
+    'SUBSCRIPTION_PAYMENT_FAILED': 'Imeshindwa kutuma mwaliko wa malipo. Jaribu tena.',
+    'SUBSCRIPTION_PAYMENT_ALREADY_PENDING': 'Ombi la malipo ya usajili tayari linasubiriwa.',
+    'SUBSCRIPTION_PAYMENT_NOT_FOUND': 'Malipo ya usajili hayajapatikana.',
+    'SUBSCRIPTION_PAYMENT_CONFIRMED': 'Malipo ya usajili yamethibitishwa.',
+
+    # Business M-Pesa credentials (per-business Daraja app)
+    'MPESA_CREDENTIALS_SAVED': 'Mipangilio ya M-Pesa imehifadhiwa.',
+    'MPESA_CREDENTIALS_NOT_CONFIGURED': 'Taarifa za M-Pesa hazijajazwa kikamilifu bado.',
+    'MPESA_CREDENTIALS_VERIFIED': 'Taarifa za M-Pesa zimehakikiwa na kuwashwa.',
+    'MPESA_CREDENTIALS_VERIFY_FAILED': 'Imeshindikana kuhakiki taarifa hizi za M-Pesa. Tafadhali zikague na ujaribu tena.',
+    'MPESA_CREDENTIALS_DEACTIVATED': 'Nambari yako ya M-Pesa imezimwa — mauzo yatatumia nambari ya pamoja ya BizYangu tena.',
 
     # Notifications & Push
     'DEVICE_REGISTERED': 'Simu imesajiliwa kwa arifa.',

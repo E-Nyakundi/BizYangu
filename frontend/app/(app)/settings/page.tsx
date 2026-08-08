@@ -1,10 +1,10 @@
 'use client'
 
 import Link from 'next/link'
-import { useAuthStore, logout, apiErrorMessage, updateMe, type UpdateMePayload } from '@/lib/auth'
+import { useAuthStore, logout, apiErrorMessage, updateMe, fetchMe, type UpdateMePayload } from '@/lib/auth'
 import { unregisterPushNotifications } from '@/lib/push'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toggleTheme, getTheme } from '@/lib/theme'
 import type { Theme } from '@/lib/theme'
 import { COPY } from '@/lib/copy'
@@ -20,7 +20,249 @@ import {
 import { shareText } from '@/lib/share-text'
 import { isPinEnabledOnDevice, setPinEnabledOnDevice } from '@/lib/device-lock'
 import { isBiometricAvailable, isBiometricEnabled, disableBiometric } from '@/lib/biometric'
-import type { Business, StaffMember } from '@/lib/types'
+import {
+  fetchBusinessMpesaCredentials,
+  saveBusinessMpesaCredentials,
+  verifyBusinessMpesaCredentials,
+  deactivateBusinessMpesaCredentials,
+  initiateSubscriptionPayment,
+  pollSubscriptionPaymentStatus,
+  type BusinessMpesaCredentialsPayload,
+} from '@/lib/payments'
+import type {
+  Business, StaffMember, MpesaWsEvent, SubscriptionPayment,
+  BusinessMpesaCredentials as BusinessMpesaCredentialsType,
+} from '@/lib/types'
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000/api/v1'
+const WS_BASE = API_BASE.replace(/^http/, 'ws').replace('/api/v1', '')
+
+// ── Subscription payment modal ──────────────────────────────────────────────
+// Deliberately NO manual-reference-entry fallback like the sale flow's
+// StkWaitingScreen has — this is a business paying BizYangu, so letting
+// someone self-declare "I paid" with a typed-in code (unverified against
+// Daraja) would let a business unlock ACTIVE status without actually
+// paying. If the callback/poll never resolves, they wait or try again —
+// see MPESA_CONFIG_CHANGES.md for why this is scoped tighter than sales.
+
+type SubStep = 'form' | 'waiting' | 'confirmed' | 'failed'
+
+function SubscriptionPaymentModal({
+  businessId,
+  defaultPhone,
+  onClose,
+  onConfirmed,
+}: {
+  businessId: string
+  defaultPhone: string
+  onClose: () => void
+  onConfirmed: () => void
+}) {
+  const [step, setStep] = useState<SubStep>('form')
+  const [phone, setPhone] = useState(defaultPhone)
+  const [amount, setAmount] = useState('800')
+  const [months, setMonths] = useState('1')
+  const [payment, setPayment] = useState<SubscriptionPayment | null>(null)
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [dotCount, setDotCount] = useState(1)
+  const wsRef = useRef<WebSocket | null>(null)
+
+  useEffect(() => {
+    if (step !== 'waiting') return
+    const t = setInterval(() => setDotCount((d) => (d % 3) + 1), 600)
+    return () => clearInterval(t)
+  }, [step])
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    setSubmitting(true)
+    try {
+      const result = await initiateSubscriptionPayment({
+        phone_number: phone.trim(),
+        amount: Number(amount),
+        months: Number(months) || 1,
+      })
+      setPayment(result)
+      setStep('waiting')
+    } catch (err) {
+      setError(apiErrorMessage(err, COPY.SETTINGS_SUB_SEND_ERROR))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleWsMessage = useCallback((event: MessageEvent) => {
+    try {
+      const msg: MpesaWsEvent = JSON.parse(event.data)
+      if (msg.type === 'subscription_result' && msg.checkout_request_id === payment?.checkout_request_id) {
+        if (msg.status === 'CONFIRMED') {
+          wsRef.current?.close()
+          setStep('confirmed')
+          onConfirmed()
+        } else if (msg.status === 'FAILED' || msg.status === 'CANCELLED') {
+          setStep('failed')
+        }
+      }
+    } catch {
+      // malformed message — ignore, polling is the fallback
+    }
+  }, [payment?.checkout_request_id, onConfirmed])
+
+  useEffect(() => {
+    if (step !== 'waiting') return
+    const wsUrl = `${WS_BASE}/ws/mpesa/${businessId}/`
+    const ws = new WebSocket(wsUrl)
+    wsRef.current = ws
+    ws.onmessage = handleWsMessage
+    ws.onerror = () => {} // silent — polling is fallback
+    return () => {
+      ws.close()
+      wsRef.current = null
+    }
+  }, [step, businessId, handleWsMessage])
+
+  // Polling fallback every 5s
+  useEffect(() => {
+    if (step !== 'waiting' || !payment) return
+    const interval = setInterval(async () => {
+      try {
+        const result = await pollSubscriptionPaymentStatus(payment.checkout_request_id)
+        if (result.status === 'CONFIRMED') {
+          setStep('confirmed')
+          onConfirmed()
+        } else if (result.status === 'FAILED' || result.status === 'CANCELLED') {
+          setStep('failed')
+        }
+      } catch {
+        // silent — WS is the primary path
+      }
+    }, 5000)
+    return () => clearInterval(interval)
+  }, [step, payment, onConfirmed])
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 50,
+      background: 'rgba(0,0,0,0.85)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 'var(--sp-5)',
+    }}>
+      <div className="card" style={{ maxWidth: 380, width: '100%', textAlign: 'center' }}>
+
+        {step === 'form' && (
+          <form onSubmit={handleSubmit}>
+            <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 'var(--sp-4)' }}>{COPY.SETTINGS_SUB_MODAL_TITLE}</h2>
+            <label className="mono" style={{ display: 'block', textAlign: 'left', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-1)' }}>
+              {COPY.SETTINGS_SUB_PHONE_LABEL}
+            </label>
+            <input
+              className="input mono"
+              style={{ marginBottom: 'var(--sp-3)' }}
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="0712345678"
+              required
+            />
+            <label className="mono" style={{ display: 'block', textAlign: 'left', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-1)' }}>
+              {COPY.SETTINGS_SUB_AMOUNT_LABEL}
+            </label>
+            <input
+              className="input mono"
+              type="number"
+              min="1"
+              style={{ marginBottom: 'var(--sp-3)' }}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              required
+            />
+            <label className="mono" style={{ display: 'block', textAlign: 'left', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-1)' }}>
+              {COPY.SETTINGS_SUB_MONTHS_LABEL}
+            </label>
+            <input
+              className="input mono"
+              type="number"
+              min="1"
+              style={{ marginBottom: 'var(--sp-4)' }}
+              value={months}
+              onChange={(e) => setMonths(e.target.value)}
+              required
+            />
+            {error && (
+              <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-error)', marginBottom: 'var(--sp-3)' }}>{error}</p>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
+              <button type="submit" className="btn-primary" disabled={submitting}>
+                {submitting ? '…' : COPY.SETTINGS_SUB_SEND}
+              </button>
+              <button type="button" className="btn-ghost" style={{ fontSize: 'var(--fs-xs)' }} onClick={onClose}>
+                {COPY.CANCEL}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {step === 'waiting' && (
+          <>
+            <div style={{ marginBottom: 'var(--sp-5)' }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: '50%',
+                border: '3px solid var(--surface-3)',
+                borderTopColor: 'var(--color-teal)',
+                margin: '0 auto',
+                animation: 'byz-spin 1s linear infinite',
+              }} />
+            </div>
+            <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 'var(--sp-2)' }}>
+              {COPY.SETTINGS_SUB_WAITING_TITLE}{'.'.repeat(dotCount)}
+            </h2>
+            <p style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-sm)', marginBottom: 'var(--sp-1)' }}>
+              {COPY.SETTINGS_SUB_SENT_TO}
+            </p>
+            <p className="mono" style={{ color: 'var(--color-teal)', fontSize: 'var(--fs-sm)', marginBottom: 'var(--sp-5)' }}>
+              {phone}
+            </p>
+            <button className="btn-ghost" style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-error)' }} onClick={onClose}>
+              {COPY.SETTINGS_SUB_CLOSE}
+            </button>
+          </>
+        )}
+
+        {step === 'confirmed' && (
+          <>
+            <div style={{ fontSize: 40, marginBottom: 'var(--sp-3)' }}>✅</div>
+            <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 'var(--sp-2)' }}>{COPY.SETTINGS_SUB_CONFIRMED}</h2>
+            <button className="btn-primary" style={{ marginTop: 'var(--sp-3)' }} onClick={onClose}>
+              {COPY.SETTINGS_SUB_CLOSE}
+            </button>
+          </>
+        )}
+
+        {step === 'failed' && (
+          <>
+            <div style={{ fontSize: 40, marginBottom: 'var(--sp-3)' }}>⚠️</div>
+            <h2 style={{ fontSize: 'var(--fs-md)', marginBottom: 'var(--sp-2)' }}>{COPY.SETTINGS_SUB_FAILED}</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)', marginTop: 'var(--sp-3)' }}>
+              <button className="btn-primary" onClick={() => { setStep('form'); setError('') }}>
+                {COPY.SETTINGS_SUB_TRY_AGAIN}
+              </button>
+              <button className="btn-ghost" style={{ fontSize: 'var(--fs-xs)' }} onClick={onClose}>
+                {COPY.SETTINGS_SUB_CLOSE}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      <style>{`
+        @keyframes byz-spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  )
+}
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -31,6 +273,9 @@ export default function SettingsPage() {
 
   const isOwner = user?.role === 'OWNER'
   const isOwnerOrManager = user?.role === 'OWNER' || user?.role === 'MANAGER'
+
+  // ── Subscription payment (owner only) ───────────────────────────────────
+  const [showSubModal, setShowSubModal] = useState(false)
 
   // ── Account details (name/email) ────────────────────────────────────────
   // Previously nothing here beyond a read-only name/phone/role — first/last
@@ -164,6 +409,80 @@ export default function SettingsPage() {
       setBusinessMsg({ type: 'error', text: apiErrorMessage(err, COPY.SETTINGS_BUSINESS_UPDATE_ERROR) })
     } finally {
       setBusinessSaving(false)
+    }
+  }
+
+  // ── Business's own M-Pesa till (owner only) ─────────────────────────────────
+  const [mpesaCreds, setMpesaCreds] = useState<BusinessMpesaCredentialsType | null>(null)
+  const [mpesaLoading, setMpesaLoading] = useState(false)
+  const [editingMpesa, setEditingMpesa] = useState(false)
+  const [mpesaForm, setMpesaForm] = useState<BusinessMpesaCredentialsPayload>({})
+  const [mpesaSaving, setMpesaSaving] = useState(false)
+  const [mpesaVerifying, setMpesaVerifying] = useState(false)
+  const [mpesaMsg, setMpesaMsg] = useState<{ type: 'ok' | 'error'; text: string } | null>(null)
+
+  useEffect(() => {
+    if (!isOwner) return
+    setMpesaLoading(true)
+    fetchBusinessMpesaCredentials()
+      .then(setMpesaCreds)
+      .catch(() => {})
+      .finally(() => setMpesaLoading(false))
+  }, [isOwner])
+
+  function startEditingMpesa() {
+    if (!mpesaCreds) return
+    setMpesaForm({
+      till_type: mpesaCreds.till_type,
+      shortcode: mpesaCreds.shortcode ?? '',
+      consumer_key: '',
+      consumer_secret: '',
+      passkey: '',
+      env: mpesaCreds.env,
+    })
+    setMpesaMsg(null)
+    setEditingMpesa(true)
+  }
+
+  async function handleSaveMpesa(e: React.FormEvent) {
+    e.preventDefault()
+    setMpesaSaving(true)
+    setMpesaMsg(null)
+    try {
+      const updated = await saveBusinessMpesaCredentials(mpesaForm)
+      setMpesaCreds(updated)
+      setEditingMpesa(false)
+      setMpesaMsg({ type: 'ok', text: updated.detail || COPY.SETTINGS_BUSINESS_UPDATED })
+    } catch (err) {
+      setMpesaMsg({ type: 'error', text: apiErrorMessage(err, COPY.SETTINGS_MPESA_SAVE_ERROR) })
+    } finally {
+      setMpesaSaving(false)
+    }
+  }
+
+  async function handleVerifyMpesa() {
+    setMpesaVerifying(true)
+    setMpesaMsg(null)
+    try {
+      const updated = await verifyBusinessMpesaCredentials()
+      setMpesaCreds(updated)
+      setMpesaMsg({ type: 'ok', text: updated.detail || COPY.SETTINGS_BUSINESS_UPDATED })
+    } catch (err) {
+      setMpesaMsg({ type: 'error', text: apiErrorMessage(err, COPY.SETTINGS_MPESA_VERIFY_ERROR) })
+    } finally {
+      setMpesaVerifying(false)
+    }
+  }
+
+  async function handleDeactivateMpesa() {
+    if (!confirm(COPY.SETTINGS_MPESA_DEACTIVATE_CONFIRM)) return
+    setMpesaMsg(null)
+    try {
+      const updated = await deactivateBusinessMpesaCredentials()
+      setMpesaCreds(updated)
+      setMpesaMsg({ type: 'ok', text: updated.detail || COPY.SETTINGS_BUSINESS_UPDATED })
+    } catch (err) {
+      setMpesaMsg({ type: 'error', text: apiErrorMessage(err, COPY.SETTINGS_MPESA_SAVE_ERROR) })
     }
   }
 
@@ -324,7 +643,7 @@ export default function SettingsPage() {
           <span style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-xs)' }}>{COPY.SETTINGS_BUSINESS_NAME}</span>
           <span style={{ fontSize: 'var(--fs-xs)' }}>{user?.business_name}</span>
         </div>
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: isOwner && user?.subscription_status !== 'ACTIVE' ? 'var(--sp-3)' : 0 }}>
           <span style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-xs)' }}>{COPY.SETTINGS_BUSINESS_STATUS}</span>
           <span
             className={`badge ${
@@ -341,7 +660,23 @@ export default function SettingsPage() {
               : user?.subscription_status}
           </span>
         </div>
+        {isOwner && user?.subscription_status !== 'ACTIVE' && (
+          <button className="btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={() => setShowSubModal(true)}>
+            {COPY.SETTINGS_PAY_SUBSCRIPTION}
+          </button>
+        )}
       </div>
+
+      {showSubModal && user?.business_id && (
+        <SubscriptionPaymentModal
+          businessId={user.business_id}
+          defaultPhone={user.phone_number}
+          onClose={() => setShowSubModal(false)}
+          onConfirmed={() => {
+            fetchMe().then(setUser).catch(() => {})
+          }}
+        />
+      )}
 
       {/* Business profile edit — owner only */}
       <div className="card" style={{ marginBottom: 'var(--sp-4)' }}>
@@ -435,6 +770,163 @@ export default function SettingsPage() {
           </p>
         )}
       </div>
+
+      {/* Business's own M-Pesa till — owner only */}
+      {isOwner && (
+        <div className="card" style={{ marginBottom: 'var(--sp-4)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-1)' }}>
+            <p className="mono" style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>{COPY.SETTINGS_MPESA_OWN_TITLE}</p>
+            {!editingMpesa && mpesaCreds && (
+              <button className="btn-ghost" style={{ fontSize: 'var(--fs-xs)' }} onClick={startEditingMpesa}>
+                {COPY.SETTINGS_EDIT}
+              </button>
+            )}
+          </div>
+          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-3)' }}>
+            {COPY.SETTINGS_MPESA_OWN_SUBTITLE}
+          </p>
+
+          {mpesaLoading && <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>{COPY.LOADING}</p>}
+
+          {!mpesaLoading && mpesaCreds && !editingMpesa && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--sp-2)' }}>
+                <span style={{ color: 'var(--color-muted)', fontSize: 'var(--fs-xs)' }}>{COPY.SETTINGS_BUSINESS_STATUS}</span>
+                <span
+                  className={`badge ${mpesaCreds.is_active ? 'badge-active' : mpesaCreds.is_configured ? 'badge-demo' : 'badge-muted'}`}
+                  style={{ fontSize: 'var(--fs-xs)' }}
+                >
+                  {mpesaCreds.is_active
+                    ? COPY.SETTINGS_MPESA_OWN_STATUS_ACTIVE
+                    : mpesaCreds.is_configured
+                    ? COPY.SETTINGS_MPESA_OWN_STATUS_UNVERIFIED
+                    : COPY.SETTINGS_MPESA_OWN_STATUS_NOT_SET}
+                </span>
+              </div>
+              <ProfileRow
+                label={COPY.SETTINGS_MPESA_TILL_TYPE}
+                value={mpesaCreds.till_type === 'BUY_GOODS' ? COPY.SETTINGS_MPESA_TILL_TYPE_BUY_GOODS : COPY.SETTINGS_MPESA_TILL_TYPE_PAYBILL}
+              />
+              <ProfileRow label={COPY.SETTINGS_MPESA_OWN_SHORTCODE} value={mpesaCreds.shortcode} />
+              <ProfileRow label={COPY.SETTINGS_MPESA_CONSUMER_KEY} value={mpesaCreds.consumer_key_masked} last={!mpesaCreds.is_configured} />
+
+              {mpesaCreds.is_configured && (
+                <div style={{ display: 'flex', gap: 'var(--sp-2)', marginTop: 'var(--sp-3)' }}>
+                  {!mpesaCreds.is_active && (
+                    <button className="btn-primary" style={{ fontSize: 'var(--fs-xs)' }} disabled={mpesaVerifying} onClick={handleVerifyMpesa}>
+                      {mpesaVerifying ? COPY.SETTINGS_MPESA_VERIFYING : COPY.SETTINGS_MPESA_VERIFY}
+                    </button>
+                  )}
+                  {mpesaCreds.is_active && (
+                    <button className="btn-ghost" style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-error)' }} onClick={handleDeactivateMpesa}>
+                      {COPY.SETTINGS_MPESA_DEACTIVATE}
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {editingMpesa && (
+            <form onSubmit={handleSaveMpesa}>
+              <label className="mono" style={{ display: 'block', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-1)' }}>
+                {COPY.SETTINGS_MPESA_TILL_TYPE}
+              </label>
+              <select
+                className="input"
+                style={{ marginBottom: 'var(--sp-3)' }}
+                value={mpesaForm.till_type ?? 'PAYBILL'}
+                onChange={(e) => setMpesaForm((f) => ({ ...f, till_type: e.target.value as 'PAYBILL' | 'BUY_GOODS' }))}
+              >
+                <option value="PAYBILL">{COPY.SETTINGS_MPESA_TILL_TYPE_PAYBILL}</option>
+                <option value="BUY_GOODS">{COPY.SETTINGS_MPESA_TILL_TYPE_BUY_GOODS}</option>
+              </select>
+
+              <label className="mono" style={{ display: 'block', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-1)' }}>
+                {COPY.SETTINGS_MPESA_OWN_SHORTCODE}
+              </label>
+              <input
+                className="input mono"
+                style={{ marginBottom: 'var(--sp-3)' }}
+                value={mpesaForm.shortcode ?? ''}
+                onChange={(e) => setMpesaForm((f) => ({ ...f, shortcode: e.target.value }))}
+              />
+
+              <label className="mono" style={{ display: 'block', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-1)' }}>
+                {COPY.SETTINGS_MPESA_CONSUMER_KEY}
+              </label>
+              <input
+                className="input mono"
+                style={{ marginBottom: 'var(--sp-3)' }}
+                value={mpesaForm.consumer_key ?? ''}
+                onChange={(e) => setMpesaForm((f) => ({ ...f, consumer_key: e.target.value }))}
+              />
+
+              <label className="mono" style={{ display: 'block', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-1)' }}>
+                {COPY.SETTINGS_MPESA_CONSUMER_SECRET}
+              </label>
+              <input
+                className="input mono"
+                type="password"
+                placeholder={COPY.SETTINGS_MPESA_CONSUMER_SECRET_HINT}
+                style={{ marginBottom: 'var(--sp-3)' }}
+                value={mpesaForm.consumer_secret ?? ''}
+                onChange={(e) => setMpesaForm((f) => ({ ...f, consumer_secret: e.target.value }))}
+              />
+
+              <label className="mono" style={{ display: 'block', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-1)' }}>
+                {COPY.SETTINGS_MPESA_PASSKEY}
+              </label>
+              <input
+                className="input mono"
+                type="password"
+                placeholder={COPY.SETTINGS_MPESA_PASSKEY_HINT}
+                style={{ marginBottom: 'var(--sp-3)' }}
+                value={mpesaForm.passkey ?? ''}
+                onChange={(e) => setMpesaForm((f) => ({ ...f, passkey: e.target.value }))}
+              />
+
+              <label className="mono" style={{ display: 'block', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-1)' }}>
+                {COPY.SETTINGS_MPESA_ENV}
+              </label>
+              <select
+                className="input"
+                style={{ marginBottom: 'var(--sp-4)' }}
+                value={mpesaForm.env ?? 'sandbox'}
+                onChange={(e) => setMpesaForm((f) => ({ ...f, env: e.target.value as 'sandbox' | 'production' }))}
+              >
+                <option value="sandbox">{COPY.SETTINGS_MPESA_ENV_SANDBOX}</option>
+                <option value="production">{COPY.SETTINGS_MPESA_ENV_PRODUCTION}</option>
+              </select>
+
+              <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+                <button type="submit" className="btn-primary" disabled={mpesaSaving} style={{ flex: 1, justifyContent: 'center' }}>
+                  {mpesaSaving ? '…' : COPY.SAVE}
+                </button>
+                <button type="button" className="btn-ghost" onClick={() => setEditingMpesa(false)} style={{ flex: 1, justifyContent: 'center' }}>
+                  {COPY.CANCEL}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {!mpesaLoading && !mpesaCreds && !editingMpesa && (
+            <button
+              className="btn-secondary"
+              style={{ fontSize: 'var(--fs-xs)' }}
+              onClick={() => { setMpesaForm({ till_type: 'PAYBILL', env: 'sandbox' }); setMpesaMsg(null); setEditingMpesa(true) }}
+            >
+              {COPY.SETTINGS_EDIT}
+            </button>
+          )}
+
+          {mpesaMsg && (
+            <p style={{ fontSize: 'var(--fs-xs)', marginTop: 'var(--sp-3)', color: mpesaMsg.type === 'ok' ? 'var(--color-teal)' : 'var(--color-error)' }}>
+              {mpesaMsg.text}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Staff management — owner/manager only */}
       {isOwnerOrManager && (

@@ -27,7 +27,7 @@ from apps.transactions.models import Transaction
 from apps.inventory.models import StockMovement
 from . import daraja
 from .daraja import DarajaError  # noqa: F401 — re-exported for views.py
-from .models import MPesaSTKRequest, MPesaTransaction
+from .models import MPesaSTKRequest, MPesaTransaction, SubscriptionPayment
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,7 @@ def initiate_stk_push(*, transaction: Transaction, phone_number: str) -> MPesaST
     cashier can retry or fall back to cash.
     """
     response = daraja.stk_push(
+        credentials=daraja.resolve_sales_credentials(transaction.business),
         phone_number=phone_number,
         amount=transaction.total_amount,
         account_reference=transaction.reference_number,
@@ -375,3 +376,117 @@ def process_c2b_confirmation(payload: dict, business) -> MPesaTransaction:
 
     _try_auto_match(mpesa_txn)
     return mpesa_txn
+
+
+# ── Subscription billing (company shortcode — BizYangu's own revenue) ──────────
+# Deliberately separate from everything above: those functions are all
+# about a business's SALES payments (sales credentials, Transaction/
+# MPesaSTKRequest/MPesaTransaction). These two are about a business
+# PAYING BIZYANGU (company credentials, SubscriptionPayment). Never
+# mix the two — see daraja.default_credentials() vs company_credentials().
+
+def initiate_subscription_payment(*, business, phone_number: str, amount, months: int = 1) -> SubscriptionPayment:
+    """
+    Starts an STK Push against the COMPANY shortcode for a business's
+    subscription fee. Raises DarajaError on failure — the caller
+    (view) turns that into an HTTP error. Nothing on Business changes
+    yet; that only happens once the callback confirms payment.
+    """
+    response = daraja.stk_push(
+        credentials=daraja.company_credentials(),
+        phone_number=phone_number,
+        amount=amount,
+        account_reference=str(business.id)[:12],
+        transaction_desc='BizYangu Sub',
+    )
+
+    return SubscriptionPayment.objects.create(
+        business=business,
+        amount=amount,
+        months=months,
+        checkout_request_id=response['CheckoutRequestID'],
+        merchant_request_id=response['MerchantRequestID'],
+        phone_number=daraja.normalize_phone(phone_number),
+        status=SubscriptionPayment.Status.PENDING,
+    )
+
+
+def process_subscription_callback(payload: dict) -> None:
+    """
+    Handles the Daraja STK callback for a subscription payment (same
+    payload shape as process_stk_callback above, but this one is
+    registered against MPESA_COMPANY_CALLBACK_URL, so it only ever
+    receives company-shortcode callbacks). On success: marks the
+    SubscriptionPayment SUCCESS and flips the business to ACTIVE.
+
+    NOTE: this sets subscription_status=ACTIVE and subscribed_at=now,
+    which — per Business.is_demo_expired() — means the business never
+    auto-expires again. Tracking a renewal/lapse date for repeat
+    billing (so a business can go from ACTIVE back to EXPIRED after
+    `months` runs out) is a separate decision, not made here.
+    """
+    body = (payload or {}).get('Body', {}).get('stkCallback', {})
+    checkout_id = body.get('CheckoutRequestID')
+    if not checkout_id:
+        logger.warning('Subscription STK callback missing CheckoutRequestID: %s', payload)
+        return
+
+    try:
+        payment = SubscriptionPayment.objects.select_related('business').get(
+            checkout_request_id=checkout_id,
+        )
+    except SubscriptionPayment.DoesNotExist:
+        logger.warning('Subscription STK callback for unknown CheckoutRequestID: %s', checkout_id)
+        return
+
+    if payment.status != SubscriptionPayment.Status.PENDING:
+        # Daraja retried a callback we already processed — ignore.
+        return
+
+    result_code = body.get('ResultCode')
+    result_desc = body.get('ResultDesc', '')
+
+    if result_code == 0:
+        items = {i['Name']: i.get('Value') for i in body.get('CallbackMetadata', {}).get('Item', [])}
+        receipt = items.get('MpesaReceiptNumber', '')
+
+        with db_transaction.atomic():
+            payment.status = SubscriptionPayment.Status.SUCCESS
+            payment.result_code = str(result_code)
+            payment.result_desc = result_desc
+            payment.mpesa_receipt_number = receipt
+            payment.raw_callback_payload = payload
+            payment.completed_at = timezone.now()
+            payment.save(update_fields=[
+                'status', 'result_code', 'result_desc', 'mpesa_receipt_number',
+                'raw_callback_payload', 'completed_at',
+            ])
+
+            business = payment.business
+            business.subscription_status = business.SubscriptionStatus.ACTIVE
+            business.subscribed_at = timezone.now()
+            business.save(update_fields=['subscription_status', 'subscribed_at'])
+
+        _broadcast(payment.business_id, {
+            'type': 'subscription_result',
+            'checkout_request_id': checkout_id,
+            'status': 'CONFIRMED',
+            'mpesa_receipt': receipt,
+        })
+    else:
+        payment.status = SubscriptionPayment.Status.FAILED
+        payment.result_code = str(result_code)
+        payment.result_desc = result_desc
+        payment.raw_callback_payload = payload
+        payment.completed_at = timezone.now()
+        payment.save(update_fields=[
+            'status', 'result_code', 'result_desc', 'raw_callback_payload', 'completed_at',
+        ])
+
+        _broadcast(payment.business_id, {
+            'type': 'subscription_result',
+            'checkout_request_id': checkout_id,
+            'status': 'FAILED',
+            'mpesa_receipt': None,
+            'result_desc': result_desc,
+        })
