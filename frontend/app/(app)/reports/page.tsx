@@ -332,7 +332,7 @@ export default function ReportsPage() {
               <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>{COPY.REPORTS_GROWTH_NO_DATA}</p>
             </div>
           ) : (
-            <div className="card" style={{ padding: 'var(--sp-4)', marginBottom: 'var(--sp-3)' }}>
+            <div className="card" style={{ padding: 'var(--sp-4)', marginBottom: 'var(--sp-3)', overflow: 'hidden' }}>
               <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-2)' }}>
                 {COPY.REPORTS_GROWTH_REVENUE_CHART_TITLE}
               </div>
@@ -355,7 +355,7 @@ export default function ReportsPage() {
               business (no stock-tracked products, no cost_price data at all)
               shouldn't see stock/margin framing that doesn't apply to it. */}
           {growth.business_mode === 'goods' && (
-            <div className="card" style={{ padding: 'var(--sp-4)' }}>
+            <div className="card" style={{ padding: 'var(--sp-4)', overflow: 'hidden' }}>
               <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-2)' }}>
                 {COPY.REPORTS_GROWTH_MARGIN_CHART_TITLE}
               </div>

@@ -45,6 +45,7 @@ of it is being reconsidered.
 | 5.5 | Settings + Staff Invite | ✅ Complete — business profile edit, staff list/invite/remove, `/join` acceptance flow |
 | 5.6 | Security/hygiene pass | ✅ Complete — general API rate limiting, Sentry initialized, admin URL moved off default path |
 | 6 | Sessions/JWT/Redis/N+1 audit | ⬜ Not started |
+| 6.5 | Notification abstraction layer (OTP/SMS/WhatsApp/email) | ⬜ Not started — see §3.2 |
 | 7 | Reports: growth & profit graphs | ⬜ Not started |
 | 8 | Knowledge Base Curation (taxonomy) | ✅ **Complete, ahead of plan** — see §3.1 note below |
 | 9 | Sell-without-inventory + progressive catalog | ⬜ Not started (taxonomy it depends on is ready) |
@@ -74,6 +75,44 @@ yet — that wiring is Phase 9 work, not a Phase 8 gap. Content accuracy
 (brand names, colloquial units like debe/gorogoro/gunia) is flagged as
 unreviewed against real Kenyan market reality — worth a pass before Phase
 9 ships it into onboarding.
+
+### 3.2 Note on Phase 6.5 (notification layer) — why it exists and how it got scoped
+Africa's Talking (AT) is BizYangu's current, working OTP/SMS provider. It
+was never actually broken — AT's published Kenya pricing (verified against
+their own 2025 pricing sheet) is KES 0.8/SMS at pilot volume and KES 8,700
+one-off for a Safaricom-only Sender ID (KES 14,100 if bundled with Airtel —
+the "KES 14K" figure that originally made AT look like a blocker was the
+bundled price, not the Safaricom-only price BizYangu actually needs).
+
+The reason to move is **architectural, not a fire**: relying on a single
+SMS vendor for something as load-bearing as login OTP is a single point of
+failure, and other Kenyan providers turned out to be genuinely cheaper at
+pilot volume once real pricing sheets (not marketing pages) were checked:
+
+| Provider | Verified pilot-volume rate | Sender ID | Source |
+|---|---|---|---|
+| Africa's Talking | KES 0.8/SMS (0–19,999/mo tier) | KES 8,700 one-off (Safaricom only) | AT's own 2025 pricing PDF |
+| MobiWave | KES 0.35/SMS (1–50,000/mo tier) | Included, no separate fee shown | MobiWave's own pricing page |
+| eSMS Africa | KES 1.08/SMS (KES 129–129,420 spend tier) | Included ("Custom SenderID" in Basic tier) | eSMS Africa's own pricing page |
+
+Note the trap every "cheapest SMS in Kenya" blog post falls into: headline
+rates (KES 0.15–0.25) are top-volume tiers, irrelevant at pilot scale. At
+BizYangu's actual pilot volume, MobiWave is cheapest, AT is mid, and eSMS
+Africa — despite the lowest *headline* number anywhere — is actually the
+most expensive of the three until spend crosses ~KES 129,500/month.
+
+**Robase** (`robase.dev`) was evaluated as a possible drop-in — a
+multi-provider OTP router with automatic failover — but it prices in
+Nigerian Naira with no confirmed Kenya coverage or rates, and using it
+would mean trusting a third party's routing/failover logic for OTP
+delivery with no visibility into which underlying carrier it actually
+used. Decision: don't adopt Robase as a vendor — build the equivalent
+routing/failover layer in-house instead, so BizYangu owns the failover
+logic, the provider list, and the delivery data. See Phase 6.5 for the
+resulting design.
+
+**No provider has been dropped.** AT stays wired in as-is; this phase adds
+alternatives behind an interface rather than ripping AT out first.
 
 ---
 
@@ -174,6 +213,87 @@ before building more on top of it. No product decisions required — a
       this correctly under real network conditions (flaky connections,
       backgrounded app)
 - [ ] Document findings — this phase produces a written audit + fixes, not new UI
+
+---
+
+### Phase 6.5 — Notification abstraction layer (OTP, SMS, WhatsApp, email)
+**Goal:** decouple `apps/accounts` (and anywhere else that sends an
+OTP, receipt, or alert) from any single vendor's SDK. One interface,
+swappable providers, per-channel routing with failover — owned by
+BizYangu, not rented from a third party. See §3.2 for how this got
+scoped and the pricing that informed it.
+
+**In scope for this phase:** SMS channel only, with two real adapters
+(AT, MobiWave) wired end-to-end. WhatsApp and email are designed for in
+the interface but not built yet — see "Explicitly deferred" below.
+
+**Design**
+
+```
+                     NotificationService (interface)
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                     │
+   OTPChannel           BroadcastChannel      (future: push)
+   (verification,       (receipts, low-stock
+    login-blocking)      alerts, non-blocking)
+        │                    │
+   ┌────┴─────┬──────────┐   │
+   │          │          │   │
+  SMS      WhatsApp    Email │
+   │          │          │   │
+ ┌─┴──┐   (Phase 9.5+  (Phase 9.5+
+ │    │    or later,    or later,
+ AT  MobiWave  not      not
+     (Phase   this      this
+      6.5)    phase)    phase)
+```
+
+- **Provider interface, not provider-specific code anywhere else in the
+  app.** Every adapter implements the same tiny contract:
+  `send(to, message, **kwargs) -> DeliveryResult(success,
+  provider_message_id, error, provider_name)`. `apps/accounts/services.py`'s
+  `send_otp_sms()` calls `notification_service.send_otp(phone, code)` —
+  it must not import `africastalking` or any vendor SDK directly.
+  Today it almost certainly does; that direct coupling is the thing
+  this phase removes.
+- **Routing + failover lives in the service layer, once — never
+  duplicated per adapter.** Config-driven priority list per channel,
+  e.g. `SMS_PROVIDER_PRIORITY = ['mobiwave', 'africastalking']`. On
+  failure (timeout, non-2xx, provider-reported delivery failure), fall
+  through to the next provider in the list before giving up. Adapters
+  stay dumb — they only know how to send and how to report back
+  success/failure, not what to do about failure.
+- **Provider selection lives in Django settings / env, not hardcoded.**
+  Swapping which provider is primary, or adding a third, is a config
+  change — not a code change in `apps/accounts`.
+- **Log every send attempt: provider used, success/failure, latency,
+  cost if known.** Per-business or aggregate. This is what actually
+  lets BizYangu compare AT vs MobiWave vs a future provider on real
+  delivery data instead of trusting anyone's marketing page — including
+  this document's own pricing table above, which will go stale.
+- **OTP failure UX:** if every provider in the SMS priority list fails
+  for a given send, surface a clear "SMS delivery is currently
+  unavailable" error rather than a generic 500 — this is a login-blocking
+  path, the failure mode matters as much as the happy path.
+
+**Tasks**
+- [ ] Define `NotificationService` interface + `DeliveryResult` dataclass in `apps/notifications`
+- [ ] Extract existing AT integration out of `apps/accounts/services.py` into an `AfricasTalkingAdapter` implementing the interface — behavior unchanged, just moved behind the interface
+- [ ] Build `MobiWaveAdapter` against MobiWave's real API docs (get these directly from MobiWave — the pricing page doesn't cover API shape) — confirm Sender ID processing timeline and any hidden requirements (their shortcode products list a "1 week waiting period + authorisation letter"; confirm whether Sender ID has the same requirements before assuming it's instant)
+- [ ] `SMS_PROVIDER_PRIORITY` setting + failover logic in the service layer
+- [ ] Per-send delivery logging (provider, success/failure, latency) — a model or at minimum structured logging queryable later
+- [ ] Swap `send_otp_sms()` and any other direct AT call sites to go through `NotificationService`
+- [ ] `DEV_OTP_BYPASS` continues to short-circuit the whole service in dev — no change to that behavior
+- [ ] One real end-to-end OTP test against each adapter (AT and MobiWave) with a real Kenyan phone number before this phase is considered done
+- [ ] Update `backend/.env.example` with MobiWave credential placeholders alongside the existing AT ones
+
+**Explicitly deferred, not in this phase:**
+- WhatsApp as an OTP/notification channel — interface should not preclude it, but no adapter built now
+- Email as a channel — same
+- eSMS Africa adapter — documented as a candidate (§3.2) but not built; add only if AT+MobiWave prove insufficient, or if MobiWave's live API/Sender ID process turns out worse than its pricing page suggests
+- Cost-based automatic provider selection (routing to whichever is cheapest per message) — priority-list failover only for now; cost optimization is a later refinement once there's real delivery data to optimize against
+- Migrating existing WhatsApp receipt-sending (already built, per Phase 5) into this abstraction — that's a working feature today; leave it alone unless it starts using the same interface makes sense later, don't disrupt it to fit this phase's timeline
 
 ---
 
@@ -333,7 +453,9 @@ open.
 
 ## 4. Sequencing
 
-**Phase 6 (audit) → Phase 7 (graphs, can run in parallel with Phase 9's
+**Phase 6 (audit) → Phase 6.5 (notification abstraction layer — not
+urgent/broken, but cheap to do early and before more code depends on
+direct AT calls) → Phase 7 (graphs, can run in parallel with Phase 9's
 wiring work) → Phase 9 (sell-without-inventory + progressive catalog —
 Phase 8 taxonomy is done, this just needs to wire it in) → Phase 10
 (demo-driven taxonomy refinement, ongoing from Phase 9's ship date) →
@@ -341,6 +463,12 @@ Phase 11 (perishability) → Phase 12 (creditor UI) → Phase 13
 (cross-business sub-niche detection, data-gated) → Phase 14 (settings,
 once list is provided) → [E-commerce, separate initiative, not sequenced
 against the above]**
+
+Phase 6.5 has no hard dependency on Phase 6 finishing first — they touch
+different parts of the codebase — but doing the infra audit first means
+Phase 6.5's new Redis-backed delivery logging (if that's the chosen
+storage) lands on top of an already-confirmed-working Redis setup rather
+than an assumed one.
 
 **Open questions, still unanswered:**
 1. Is there anything in daily use *today* that should jump this queue —
@@ -634,6 +762,9 @@ Only after all nine pass: hand the APK to the first real pilot business.
 | Chang'aa/local spirits excluded from bar taxonomy | Licensing sensitivity unresolved — revisit only once there's a real answer |
 | Animal feed deferred to a future `agrovet` type | Not one of the 9 first-cohort types; adding it is future Phase 8 scope |
 | M-Pesa float excluded from stock tracking | Cash-equivalent, not a stocked physical item — taxonomy-level flag only, float-balance handling itself is unbuilt |
+| Build the OTP/notification routing layer in-house rather than adopt Robase | Robase's multi-provider failover is exactly the abstraction BizYangu needs, but using it means trusting a third party's routing for a login-blocking path with no visibility into which carrier was actually used; owning it means owning the failover logic and the delivery data |
+| Keep Africa's Talking wired in as one of multiple SMS providers, not remove it | AT was never actually broken — its real pricing (KES 0.8/SMS pilot tier, KES 8,700 Safaricom-only Sender ID) is normal for Kenya, not the KES 14K blocker it first looked like; the KES 14,100 figure was the bundled Safaricom+Airtel price, not what BizYangu needs |
+| MobiWave added as a second SMS provider ahead of eSMS Africa | Verified pricing (KES 0.35/SMS at pilot volume) is cheapest of the three at BizYangu's actual scale; eSMS Africa's real tiered pricing is more expensive than AT until spend exceeds ~KES 129,500/month despite advertising the lowest headline rate |
 
 ---
 
@@ -673,5 +804,6 @@ Deliverables from each session: patch of changed files only, with a
 
 ---
 
-*BizYangu Master Plan — consolidated August 2026. This document is the
-living plan going forward — update it in place rather than creating a v4.*
+*BizYangu Master Plan — consolidated August 2026, updated same month with
+Phase 6.5 (notification abstraction layer). This document is the living
+plan going forward — update it in place rather than creating a v4.*
