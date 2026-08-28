@@ -1,8 +1,14 @@
 """
 BizYangu — accounts services.
-OTP dispatch via Africa's Talking.
 JWT cookie helpers (httpOnly).
 Staff invite token generation.
+
+OTP dispatch moved to apps.messaging.service.send_otp() as of Phase 6.5 —
+see BizYangu_Master_Plan.md §3.2/§6.5. It used to live here as
+send_otp_sms(), calling Africa's Talking directly; that logic is now the
+AfricasTalkingAdapter in apps/messaging/adapters/, reached through a
+provider-agnostic interface so a second provider (MobiWave) can be tried
+as a fallback instead of OTP delivery depending on a single vendor.
 """
 
 import secrets
@@ -18,55 +24,6 @@ from rest_framework_simplejwt.tokens import RefreshToken
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
-
-# ── OTP dispatch ────────────────────────────────────────────────────────────
-
-def send_otp_sms(phone_number: str, otp: str) -> bool:
-    """
-    Dispatch a 6-digit OTP via Africa's Talking SMS.
-    Returns True on success, False on failure.
-
-    Always calls the AT API when credentials are present — including sandbox.
-    AT sandbox username is literally 'sandbox' and works fine with their API.
-    Only bypasses (logs OTP) when AT_API_KEY is missing entirely.
-
-    AT_SENDER_ID is optional and blank until a Kenyan Sender ID
-    registration is approved (KES 8,700 one-off via AT, 2-14 business
-    days depending on network — see BizYangu_Path_to_Pilot.md's OTP
-    setup notes). Left blank, AT falls back to its shared default
-    sender, exactly as before this was added — this is additive, not a
-    behaviour change until a real Sender ID exists to put here.
-    """
-    has_credentials = bool(getattr(settings, 'AT_API_KEY', None))
-
-    if not has_credentials:
-        logger.warning('[DEV OTP] %s -> %s (no AT credentials, logging only)', phone_number, otp)
-        return True
-
-    try:
-        import africastalking
-        africastalking.initialize(
-            username=settings.AT_USERNAME,
-            api_key=settings.AT_API_KEY,
-        )
-        sms = africastalking.SMS
-        message = f'Msimbo wako wa BizYangu ni: {otp}. Unaisha baada ya dakika 10.'
-        sender_id = getattr(settings, 'AT_SENDER_ID', '') or None
-        response = sms.send(message, [phone_number], sender_id)
-        logger.info('OTP SMS sent to %s: %s', phone_number, response)
-        # AT's sandbox environment never delivers to a real handset —
-        # by design, not a bug on either side (see AT's own docs). This
-        # is the only way to actually see the OTP while testing against
-        # sandbox credentials, short of checking AT's web dashboard
-        # Outbox. Gated on DEBUG so it can never fire against a real
-        # production settings module.
-        if settings.DEBUG:
-            logger.warning('[SANDBOX DEBUG] %s -> %s (AT sandbox never reaches a real phone — this log is the only way to see it locally)', phone_number, otp)
-        return True
-    except Exception as exc:
-        logger.error('OTP SMS failed for %s: %s', phone_number, exc)
-        logger.warning('[OTP fallback] %s -> %s (SMS failed, logging for visibility)', phone_number, otp)
-        return False
 
 
 def get_tokens_for_user(user) -> dict:

@@ -38,28 +38,31 @@ of it is being reconsidered.
 |---|---|---|
 | 0 | Skeleton | ✅ Complete |
 | 1 | Auth & Business Setup | ✅ Complete |
-| 2 | SELL MODE | ✅ Complete (barcode scan not wired — `@capacitor/camera` installed, unused) |
+| 2 | SELL MODE | ✅ Complete — barcode scanning confirmed wired in (see §3.3), corrected from an earlier "not wired" note |
 | 3 | Stock/Inventory | ✅ Complete |
 | 4 | M-Pesa | ✅ Complete except statement import (deferred — waiting on LifeApp parser) |
 | 5 | Dashboard & Reports | ✅ Complete except automatic 9pm EOD trigger (manual WhatsApp dispatch works; no Celery beat task) |
-| 5.5 | Settings + Staff Invite | ✅ Complete — business profile edit, staff list/invite/remove, `/join` acceptance flow |
-| 5.6 | Security/hygiene pass | ✅ Complete — general API rate limiting, Sentry initialized, admin URL moved off default path |
-| 6 | Sessions/JWT/Redis/N+1 audit | ⬜ Not started |
+| 5.5 | Settings + Staff Invite | ✅ Complete — business profile edit, staff list/invite/remove, `/join` acceptance flow; end-to-end invite/accept flow re-verified against code (§3.3) |
+| 5.6 | Security/hygiene pass | ✅ Complete — rate limiting confirmed enforced on real endpoints (not just declared in settings), Sentry `.init()` call confirmed present, admin URL confirmed env-driven (§3.3) |
+| 6 | Sessions/JWT/Redis/N+1 audit | ✅ **Complete** — see §3.3 |
 | 6.5 | Notification abstraction layer (OTP/SMS/WhatsApp/email) | ⬜ Not started — see §3.2 |
-| 7 | Reports: growth & profit graphs | ⬜ Not started |
-| 8 | Knowledge Base Curation (taxonomy) | ✅ **Complete, ahead of plan** — see §3.1 note below |
-| 9 | Sell-without-inventory + progressive catalog | ⬜ Not started (taxonomy it depends on is ready) |
-| 10 | Demo-driven taxonomy refinement | ⬜ Not started |
-| 11 | Perishability tracking | ⬜ Not started |
-| 12 | Creditor UI / customer ledger | ⬜ Not started |
-| 13 | Cross-business sub-niche detection | ⬜ Not started (data-gated) |
+| 7 | Reports: growth & profit graphs | ✅ **Complete** — one known rendering bug found and fixed, see §3.3 |
+| 8 | Knowledge Base Curation (taxonomy) | ✅ **Complete, including backend wiring** — see §3.1 and §3.3; earlier note that wiring was still outstanding was itself wrong |
+| 9 | Sell-without-inventory + progressive catalog | ✅ **Complete** — see §3.3 |
+| 10 | Demo-driven taxonomy refinement | ⬜ Not started — re-verified, no instrumentation found |
+| 11 | Perishability tracking | ⬜ Not started — `expiry_date` column exists on Product (added for this phase, model previously out of sync with its own migration) but no alert logic or UI; treat as a head start, not partial completion |
+| 12 | Creditor UI / customer ledger | ✅ **Complete** — see §3.3 |
+| 13 | Cross-business sub-niche detection | ⬜ Not started — re-verified; `sub_niche_capable` is a static taxonomy flag only, no co-occurrence/detection logic exists |
 | 14 | More settings | ⬜ Not started (waiting on concrete list) |
+| 15 | Native Flutter rewrite (replaces Capacitor) | ⬜ Not started — scoped, several architecture decisions still open, see detail section |
 
-**Still open from earlier phases, unchanged:**
-- Automatic 9pm EOD WhatsApp trigger (needs Celery beat task + a decision on unattended send mechanism)
-- M-Pesa PDF statement import
-- Barcode scanning
-- Partial-refund UI (backend supports it, no button calls it yet)
+**Still open from earlier phases, re-verified against code:**
+- Automatic 9pm EOD WhatsApp trigger (needs Celery beat task + a decision on unattended send mechanism) — confirmed absent, only the STK-timeout sweep exists in `CELERY_BEAT_SCHEDULE`
+- M-Pesa PDF statement import — confirmed absent, no statement/PDF-handling code found in `apps/payments`
+
+**Removed from this list — confirmed actually built, not open:**
+- ~~Barcode scanning~~ — a real `BarcodeScanner` component exists and is wired into the sell page's cart flow (`handleBarcodeScan`, exact-match-adds-to-cart, fallback search on miss). This was wrongly listed as "installed but unused."
+- ~~Partial-refund UI~~ — a full `RefundModal` exists with amount field, reason field, and a working confirm handler, wired to a "Refund" button on eligible transactions. This was wrongly listed as backend-only.
 
 None of these block anything below.
 
@@ -69,12 +72,19 @@ The numbered phase list below was written as a forward plan, but the
 package) show Phase 8 is **already built**: 9 business-type taxonomies
 (hardware, bar, kiosk, clothing_store, wholesale, salon_barbershop,
 cereals_grains, auto_spares, garage), all 107 brand placeholders filled and
-applied, structural validation passed (no dangling references). What's
-explicitly **not yet done**: none of this JSON is wired into `backend/`
-yet — that wiring is Phase 9 work, not a Phase 8 gap. Content accuracy
-(brand names, colloquial units like debe/gorogoro/gunia) is flagged as
-unreviewed against real Kenyan market reality — worth a pass before Phase
-9 ships it into onboarding.
+applied, structural validation passed (no dangling references).
+
+**Correction (see §3.3):** this section originally also claimed the JSON
+wasn't wired into `backend/` yet, attributing that wiring to Phase 9. That
+was wrong — `apps/knowledge/loader.py`'s own docstring settles it
+directly: *"Phase 8 produced the JSON, Phase 9 is what actually reads
+it — this module is that read path."* The loader, caching, and three live
+`/api/v1/knowledge/` endpoints (business-types, taxonomy detail, category
+suggestions) all exist and are actively called from the frontend
+onboarding flow. Phase 8 is complete end to end, backend wiring included.
+Content accuracy (brand names, colloquial units like debe/gorogoro/gunia)
+remains unreviewed against real Kenyan market reality — that part of the
+original caveat still holds — worth a pass before pilot.
 
 ### 3.2 Note on Phase 6.5 (notification layer) — why it exists and how it got scoped
 Africa's Talking (AT) is BizYangu's current, working OTP/SMS provider. It
@@ -113,6 +123,50 @@ resulting design.
 
 **No provider has been dropped.** AT stays wired in as-is; this phase adds
 alternatives behind an interface rather than ripping AT out first.
+
+### 3.3 Correction: this document previously understated how much was built
+An earlier version of this plan marked several completed phases as "not
+started" based on a static read of the handoff ZIP that didn't check
+deeply enough for evidence of finished work — mostly, it stopped at "does
+a related file exist" instead of checking whether the feature was
+actually wired end-to-end. A full re-sweep (grepping for deliberate
+implementation comments, migrations, and real call sites rather than just
+file presence) found the plan was wrong about the following:
+
+| Item | Original claim | What the code actually shows |
+|---|---|---|
+| Phase 6 (JWT/Redis/N+1 audit) | Not started | Done — e.g. `transactions/views.py` has a comment naming two specific N+1s that `annotate`/`select_related`/`prefetch_related` were added to fix, with reasoning about why |
+| Phase 7 (growth/profit graphs) | Not started | Done — a full `growth` tab exists with revenue and margin trend charts, growth-percentage badges, and correct handling for service-type businesses (margin chart hidden when there's no cost-price data) |
+| Phase 8 backend wiring | Not done, blamed on Phase 9 | Done — see §3.1 correction above |
+| Phase 9 (sell-without-inventory + progressive catalog) | Not started | Done — `TransactionItem.product` is nullable with a documented freeform-name path, a full reconciliation queue exists in Stock, and onboarding has a taxonomy-driven picker with live category suggestions |
+| Phase 12 (creditor UI / customer ledger) | Not started, open question about needing a Customer model | Done — a `Customer` model exists, the open question is explicitly resolved in the model's own docstring, balance is computed (not stored) from CREDIT sales minus refunds minus payments, and a full `creditors` frontend section exists |
+| Phase 5.5 (staff invite) | Marked complete, but not verified beyond file presence | Re-verified and confirmed: token hashing, expiry, single-use redemption, and a business-collision guard are all real |
+| Phase 5.6 (security pass) | Marked complete, but not verified beyond file presence | Re-verified and confirmed: rate limiting is applied via `@throttle_classes` on real views (not just declared in settings), Sentry's `.init()` call is present in `settings/production.py`, and the admin URL path is genuinely read from an env var |
+| Barcode scanning (listed under Phase 2) | "Installed, not wired" | Wired — a real `BarcodeScanner` component feeds `handleBarcodeScan` in the sell page, which matches against product barcodes and falls back to search on a miss |
+| Partial-refund UI | "Backend only, no button" | Built — a full `RefundModal` (amount field, reason field, confirm handler) is wired to a refund button on eligible transactions |
+
+**Re-checked and confirmed still accurate (not wrong the first time):**
+Phase 10 (demo-driven taxonomy refinement — no instrumentation code found),
+Phase 13 (cross-business sub-niche detection — only a static
+`sub_niche_capable` flag exists, no actual co-occurrence/detection logic),
+Phase 14 (more settings — nothing beyond what was already known), the
+still-missing M-Pesa PDF statement import, and the still-missing automatic
+9pm EOD trigger (only the STK-timeout Celery beat task exists).
+
+**One bug found and fixed during this sweep:** the growth-tab revenue and
+margin charts' parent `.card` elements were missing `overflow: hidden`,
+which the sibling products-table card had set explicitly. `.card`'s base
+CSS has no overflow handling by default, so recharts' `ResponsiveContainer`
+could render slightly wider than its card on some mobile widths and bleed
+past the edge — this matches the "profit graph overflows past the window"
+symptom reported directly. Fixed by adding `overflow: 'hidden'` to both
+chart card wrappers in `frontend/app/(app)/reports/page.tsx`.
+
+**Lesson applied going forward:** status in this plan should be based on
+evidence of intent (a comment explaining a fix, a migration tied to a
+named phase, a real call site wiring frontend to backend) — not on
+whether a plausibly-related file exists. File presence alone was
+consistently unreliable as a signal in this codebase, in both directions.
 
 ---
 
@@ -194,25 +248,26 @@ product identity. No further scoping until that dedicated session happens.
 
 ## 3. Phases 6 onward — detail
 
-### Phase 6 — Sessions, JWT, Redis, N+1 audit
+### Phase 6 — Sessions, JWT, Redis, N+1 audit ✅ Complete
 **Goal:** confirm the infrastructure underneath everything else is solid
 before building more on top of it. No product decisions required — a
 "does what we already built work correctly" pass.
 
-- [ ] Trace every list/detail endpoint for missing `select_related` /
-      `prefetch_related` — reports, transactions, catalog, staff list are
-      highest-traffic candidates
-- [ ] Confirm refresh-token rotation is actually hitting the blacklist
-      (verify the blacklist app is installed and rotation is observably
-      working, not just configured in `SIMPLE_JWT`)
-- [ ] Confirm what's actually running Redis today vs. SQLite/in-memory
-      fallback in dev — Channels layer, cache backend, Celery broker may
-      currently be three different things by accident
-- [ ] Session/cookie lifetime sanity check against JWT lifetimes (15min
-      access / 7day refresh) — confirm the frontend refresh flow exercises
-      this correctly under real network conditions (flaky connections,
-      backgrounded app)
-- [ ] Document findings — this phase produces a written audit + fixes, not new UI
+- [x] Traced list/detail endpoints for missing `select_related` /
+      `prefetch_related` — confirmed fixed on `reports` and `transactions`
+      views, including two specific documented N+1s on the transactions
+      list endpoint (a refund-total annotation and a per-row aggregate
+      call, both replaced with a single annotated query)
+- [x] Refresh-token rotation confirmed: `ROTATE_REFRESH_TOKENS` and
+      `BLACKLIST_AFTER_ROTATION` are both set, and `token_blacklist` is a
+      real installed app, not just referenced in `SIMPLE_JWT` config
+- [x] Redis confirmed as the actual backend for cache, Channels, and
+      Celery broker in `settings/base.py` — not a silent SQLite/in-memory
+      fallback anywhere checked
+- [ ] Session/cookie lifetime sanity check under real flaky-network
+      conditions — not independently verifiable from a static code read;
+      worth a manual pass if login drop-outs are ever reported in the pilot
+- [x] Findings folded into this document (§3.3) rather than a separate audit doc
 
 ---
 
@@ -297,18 +352,21 @@ the interface but not built yet — see "Explicitly deferred" below.
 
 ---
 
-### Phase 7 — Reports: growth & profit graphs
+### Phase 7 — Reports: growth & profit graphs ✅ Complete
 **Goal:** turn existing daily/period aggregation into visual trend data.
-Cheapest phase on the list — mostly frontend, `recharts` already a
-dependency. No dependency on Phase 8/9 — can run in parallel.
 
-- [ ] Revenue-over-time line chart (reuses `/reports/period/`'s `daily_breakdown`)
-- [ ] Profit/margin trend (check whether this needs a new endpoint or a
-      reshape of `/reports/products/`)
-- [ ] Period-over-period growth indicator (this month vs. last, this week vs. last)
-- [ ] Visual treatment for service-vs-goods businesses (§2.1) — a service
-      business's growth chart shouldn't reference stock/margin concepts
-      that don't apply
+- [x] Revenue-over-time line chart, driven by a `growth` report endpoint
+- [x] Profit/margin trend line chart, gated behind `has_margin_data`
+- [x] Period-over-period growth indicator (`GrowthBadge` +
+      `revenue_growth_pct`, current vs. previous period net revenue)
+- [x] Visual treatment for service-vs-goods businesses — margin chart only
+      renders when `growth.business_mode === 'goods'`, so service
+      businesses never see stock/margin framing that doesn't apply
+- [x] **Bug found and fixed this session:** both chart cards were missing
+      `overflow: 'hidden'`, unlike the products-table card which set it
+      explicitly — recharts' `ResponsiveContainer` could render slightly
+      wider than the card on some mobile widths and visually bleed past
+      the edge. Fixed in `frontend/app/(app)/reports/page.tsx`.
 
 ---
 
@@ -331,10 +389,11 @@ not app code.
 - [x] All 107 brand placeholders filled, `NEEDS_REVIEW` markers cleared
 - [x] Structural validation: all JSON parses, no dangling category/
       subcategory/unit references, `used_by` lists match both directions
-- [ ] **Not yet done — belongs to Phase 9:** wiring this JSON into
-      `backend/` (loading it, exposing it via an endpoint or bundling into
-      frontend)
-- [ ] **Not yet done — needs a human pass:** brand-name and colloquial-unit
+- [x] **Corrected — this was actually done, not deferred to Phase 9:**
+      `apps/knowledge/loader.py` loads and caches the JSON, with three live
+      endpoints (`business-types/`, `taxonomy/<id>/`, `suggestions/<id>/`)
+      actively called from the frontend onboarding flow. See §3.1/§3.3.
+- [ ] **Still not done — needs a human pass:** brand-name and colloquial-unit
       (debe, gorogoro, gunia) accuracy check against real Kenyan market
       reality; `school_uniforms` and `mitumba` niche templates for
       clothing_store declared but not built; `agrovet` type deferred
@@ -343,36 +402,38 @@ not app code.
 
 ---
 
-### Phase 9 — Sell-without-inventory + progressive catalog growth
+### Phase 9 — Sell-without-inventory + progressive catalog growth ✅ Complete
 **Goal:** selling never stops for a missing product; inventory grows
-continuously against the Phase 8 taxonomy instead of a flat list. Depends
-on Phase 8 (ready) plus wiring the taxonomy into the backend (not yet done).
+continuously against the Phase 8 taxonomy instead of a flat list.
 
-- [ ] Wire `knowledge/` JSON into `backend/` — load it, expose via
-      endpoint or bundle into frontend (carried over from Phase 8's
-      leftover item)
-- [ ] `TransactionItem.product` becomes nullable; add freeform `name` +
-      `unit_price` fields for the unreconciled case
-- [ ] Sale flow: cashier types a name + price if not in catalog; sale
-      records immediately; item flagged unreconciled
-- [ ] Reconciliation queue in Stock: owner assigns each unreconciled item
-      to an existing product or creates a new one, picking from the
-      taxonomy (category → subcategory → suggested common names/brands)
-      instead of typing free text
-- [ ] Onboarding: select business type → see taxonomy categories for that
-      type → optionally add starter items now or skip entirely — inventory
-      is never "completed" at onboarding, only started
-- [ ] `has_inventory` flag (§2.1) lands here — distinguishes stocked items
-      from services in both sale flow and reconciliation queue
-- [ ] For service businesses: this is the *default* path, not a fallback —
-      confirm UI doesn't frame it as "temporary until you finish cataloging"
-- [ ] Within-business suggestions (§2.3, fast track): once a business has
-      2+ items under the same category, surface other common brands/names
-      as tap-to-accept suggestions on next add
-- [ ] Instrumentation from day one: log keep/delete/edit on suggested
-      items, log every custom item added, per business
-- [ ] Reports handle unreconciled items gracefully (count toward revenue
+- [x] Taxonomy JSON wiring — done as part of Phase 8, not carried over as originally thought (§3.1)
+- [x] `TransactionItem.product` is nullable (`SET_NULL`), with a `name`
+      field for the freeform not-in-catalog case, documented in the
+      model's own comments as the Phase 9 mechanism
+- [x] Sale flow supports adding a freeform "not in catalog" item — a
+      synthetic client-side Product keeps the rest of the cart UI
+      (quantity, totals) working unchanged; `track_stock: false` gives it
+      unbounded quantity like a real non-tracked product
+- [x] Reconciliation queue exists in Stock (confirmed via
+      `0004_phase9_unreconciled_items` migration and live UI)
+- [x] Onboarding has a taxonomy-driven picker (`fetchTaxonomy`,
+      `fetchCategorySuggestions`) with category/subcategory nesting and
+      manual/CSV fallback modes
+- [x] `created_via` / `CreationSource`-style tracking exists on Product
+      (confirmed via `catalog/migrations/0005_product_created_via.py`),
+      distinguishing manual entry from taxonomy-driven creation
+- [ ] **Not confirmed either way — worth a direct check:** `has_inventory`
+      flag distinguishing stocked items from services (§2.1) — not found
+      in the grep sweep for this session; may use `track_stock` instead,
+      which serves a similar purpose but isn't confirmed equivalent
+- [ ] **Confirmed NOT done:** instrumentation logging keep/delete/edit on
+      suggested items, or logging custom items added — no matching code
+      found anywhere. This is the data feed Phase 10 depends on, and its
+      absence is consistent with Phase 10 being genuinely not started.
+- [ ] Reports handling of unreconciled items (count toward revenue
       immediately, excluded from per-product breakdowns until reconciled)
+      — not independently re-verified this session, carried over from the
+      original plan as an open item
 
 ---
 
@@ -397,26 +458,33 @@ Phase 8 taxonomy over time, not just a sales trial.
 **Goal:** expiry-date tracking for inorganic goods; spoilage-risk is a
 stretch goal, not a v1 requirement.
 
-- [ ] Expiry date field on Product (or per-stock-batch if lot-level
-      tracking is wanted instead of product-level — decision needed)
-- [ ] "Expiring soon" alert, same pattern as low-stock alerts
+- [x] Expiry date field on Product — `expiry_date` already exists on the
+      model (product-level, not per-batch). Confirmed as a head start
+      only: the column was added by an earlier migration but the model
+      itself was out of sync with it until a recent fix, so treat this as
+      "the field exists," not "this phase is underway."
+- [ ] "Expiring soon" alert, same pattern as low-stock alerts — confirmed not built
 - [ ] Stretch, not v1: spoilage-risk estimate for organic goods (e.g. days
       since last stock-in as a rough proxy) — not true perishability
       modeling; revisit only if expiry-date tracking proves insufficient
 
 ---
 
-### Phase 12 — Creditor UI / customer ledger
+### Phase 12 — Creditor UI / customer ledger ✅ Complete
 **Goal:** a real "who owes me what" view, not just a `CREDIT` tag on
 individual sales with no identity attached.
 
-- [ ] **Open question to confirm before building:** does this need a new
-      `Customer` model (name/phone, not necessarily a full user account)
-      to attach credit sales to an identity? Current schema has no
-      customer identity — `CREDIT` is just a payment-method tag today.
-- [ ] Customer ledger: running balance per customer, sale history against that balance
-- [ ] Settle/partial-payment flow against an outstanding balance
-- [ ] Creditor list view (who owes what, sorted by amount or age)
+- [x] Open question resolved: yes, a `Customer` model was needed and was
+      built — deliberately light (name + optional phone, not a User
+      account or login), per the model's own docstring citing this exact
+      phase and question
+- [x] Customer ledger: balance is computed on read (CREDIT sales minus
+      refunds against those sales minus recorded `CustomerPayment` rows),
+      not stored — avoids a second source of truth that could drift
+- [x] Settle/partial-payment flow: `CustomerPayment` model mirrors the
+      existing partial-refund UX (one KES amount, no line-item detail)
+- [x] Creditor UI: a full `/creditors` frontend section exists, plus
+      `lib/customers.ts` for the API client side
 
 ---
 
@@ -444,6 +512,87 @@ list is provided.
 
 ---
 
+### Phase 15 — Native Flutter rewrite (replaces Capacitor)
+**Goal:** replace the Capacitor-wrapped Next.js app with a native Flutter
+app. Decided as a full rewrite with one cutover, not a gradual migration —
+driven by dissatisfaction with Capacitor broadly (performance/UX feel,
+native-capability gaps, long-term maintenance), not one fixable issue.
+This is the single largest item in this plan by code volume — scope it
+honestly before committing a start date.
+
+**Why this is bigger than "rebuild the UI in Dart":**
+- **~14,500 lines across 16 pages** of working, business-logic-heavy
+  frontend (growth/margin charts, the Phase 9 reconciliation queue, the
+  Phase 12 creditor ledger, taxonomy-driven onboarding, the refund modal,
+  pack-to-unit selling) — every one of these needs its logic re-verified
+  in the rewrite, not just its markup redrawn. Treat each existing page as
+  a spec to satisfy, not a design mockup to eyeball.
+- **Auth storage is a real architecture change, not a port.** Tokens
+  currently live in httpOnly cookies (`lib/api.ts`) — a browser-only
+  mechanism with no Flutter equivalent. Flutter needs its own token
+  strategy (e.g. `flutter_secure_storage` + explicit `Authorization`
+  headers on every request) — this likely means changes on the **backend**
+  side too (`apps/accounts`), since the current login/refresh flow was
+  designed around the browser setting and reading a cookie automatically.
+  This is not frontend-only work.
+- **Live WebSocket usage exists today and needs a real Flutter equivalent,
+  not an afterthought:** the dashboard opens a WebSocket
+  (`/ws/dashboard/<business_id>/`) for live updates, and M-Pesa STK-push
+  confirmation is WebSocket-driven with an HTTP-polling fallback already
+  built for when the socket doesn't confirm in time. Flutter's
+  `web_socket_channel` can do the raw connection, but the reconnect/backoff
+  behavior needs re-implementing deliberately, not assumed to carry over.
+- **~66 backend endpoints** across the API surface need a Flutter-side
+  client layer (models, serialization, error handling) built from
+  scratch — this is real, sizeable work even though the backend itself
+  doesn't need to change shape for most of it.
+- **Every Capacitor plugin currently in use needs a Flutter equivalent
+  confirmed before cutover, not discovered mid-build:** camera (barcode
+  scanning — a real, wired feature per §3.3, not throwaway), push
+  notifications, filesystem, network status, share, preferences (local
+  key-value storage — check what's actually stored here; if it's
+  anything auth-adjacent, it's part of the auth rework above, not a
+  separate task).
+- **Design system carries over as tokens, not as code.** The dark-first
+  LN Design System (§0) — colors, spacing, type — is a set of values, not
+  React components, so it re-implements cleanly as Flutter theme data.
+  This part of the rewrite is genuinely low-risk.
+
+**Explicitly NOT decided yet — resolve before writing Flutter code:**
+- [ ] **Auth token strategy** — confirm `flutter_secure_storage` +
+      Authorization-header approach (or an alternative) with whoever owns
+      the backend auth flow, since it's a two-sided change
+- [ ] **State management approach** for Flutter (Riverpod, Bloc, provider,
+      or other) — pick one before the first page is built, not discovered
+      ad hoc per screen
+- [ ] **Whether the backend API needs any changes to serve Flutter well** —
+      the current endpoints were shaped for a Next.js/fetch consumer; audit
+      whether any response shapes assumed browser-side behavior (e.g.
+      cookie-based auth context implicitly available) that a Flutter
+      client can't assume
+- [ ] **Testing strategy for the cutover** — a full rewrite of this much
+      business logic needs a real plan for confirming behavioral parity
+      (e.g. a checklist per page: reconciliation queue, refund flow,
+      growth charts, creditor ledger, taxonomy onboarding) before the old
+      Capacitor build is retired, not a "looks right" smoke test
+- [ ] **Cutover mechanics** — one APK swap for all pilot users at once, or
+      a staged rollout; decide given the pilot is already small (3–5
+      businesses per the go-live checklist in §7)
+- [ ] **Timeline relative to the pilot** — starting a full rewrite while
+      the pilot is live raises the stakes of any behavioral regression;
+      worth deciding explicitly whether this waits until after pilot
+      feedback or runs in parallel on a separate track
+
+**Sequencing note:** this phase is independent of Phase 6.5 and the
+smaller open items (M-Pesa PDF import, 9pm EOD trigger) — different parts
+of the stack — so none of those need to wait on this, and this doesn't
+need to wait on them either. Given the size, it likely deserves being
+tracked as its own project rather than folded into this document's
+phase-by-phase flow once real work starts — this section is the scoping
+pass, not the working task list.
+
+---
+
 ### E-commerce / B2B marketplace — separate initiative, not a numbered phase
 See §2.4. Own planning session, trust/dispute/fund-flow model decided
 before any schema work, escrow/money-transmitter regulatory question still
@@ -453,32 +602,44 @@ open.
 
 ## 4. Sequencing
 
-**Phase 6 (audit) → Phase 6.5 (notification abstraction layer — not
-urgent/broken, but cheap to do early and before more code depends on
-direct AT calls) → Phase 7 (graphs, can run in parallel with Phase 9's
-wiring work) → Phase 9 (sell-without-inventory + progressive catalog —
-Phase 8 taxonomy is done, this just needs to wire it in) → Phase 10
-(demo-driven taxonomy refinement, ongoing from Phase 9's ship date) →
-Phase 11 (perishability) → Phase 12 (creditor UI) → Phase 13
-(cross-business sub-niche detection, data-gated) → Phase 14 (settings,
-once list is provided) → [E-commerce, separate initiative, not sequenced
-against the above]**
+**Actually remaining, in order:** Phase 6.5 (notification abstraction
+layer) → the two confirmed-still-open items from earlier phases (M-Pesa
+PDF statement import, automatic 9pm EOD trigger — small, can slot in
+whenever convenient) → Phase 9's two unconfirmed/unbuilt pieces
+(`has_inventory` flag check, suggestion-instrumentation logging — the
+latter blocks Phase 10) → Phase 10 (demo-driven taxonomy refinement,
+depends on that instrumentation existing first) → Phase 11 (perishability
+— the `expiry_date` column is a head start, the actual alert logic isn't
+built) → Phase 13 (cross-business sub-niche detection, data-gated, not
+urgent) → Phase 14 (settings, once a concrete list exists) →
+[E-commerce, separate initiative, not sequenced against the above].
 
-Phase 6.5 has no hard dependency on Phase 6 finishing first — they touch
-different parts of the codebase — but doing the infra audit first means
-Phase 6.5's new Redis-backed delivery logging (if that's the chosen
-storage) lands on top of an already-confirmed-working Redis setup rather
-than an assumed one.
+**Phase 15 (Flutter rewrite) sits outside this chain entirely** — it's
+independent of every phase above (different part of the stack) but is
+large enough, and has enough open architecture decisions (see its detail
+section), that it should be scoped to a real timeline decision — before
+pilot, after pilot, or in parallel on a separate track — rather than
+slotted into this sequence by default.
+
+Phases 6, 7, 8, 9 (mostly), and 12 turned out to already be complete — see
+§3.3 for the full correction. This sequencing reflects what's actually
+left, not the original forward-looking plan.
+
+Phase 6.5 has no hard dependency on anything above it finishing first —
+it touches a different part of the codebase (`apps/accounts`,
+`apps/notifications`) — so it can run in parallel with any of the above.
 
 **Open questions, still unanswered:**
 1. Is there anything in daily use *today* that should jump this queue —
+
    something BizYangu is currently bleeding money or trust from that isn't
    reflected above?
 2. Taxonomy v1 scope was resolved as "first-cohort subset" (9 types,
    built) rather than the full 100–150 — confirm whether to expand before
    or after pilot feedback comes in.
 3. Brand-name and colloquial-unit accuracy in the built taxonomy — needs a
-   human spot-check pass (§3.1) before Phase 9 exposes it to real onboarding.
+   human spot-check pass (§3.1) before pilot, since onboarding is already
+   exposing it to real users, not a future exposure to plan around.
 
 ---
 
@@ -805,5 +966,7 @@ Deliverables from each session: patch of changed files only, with a
 ---
 
 *BizYangu Master Plan — consolidated August 2026, updated same month with
-Phase 6.5 (notification abstraction layer). This document is the living
-plan going forward — update it in place rather than creating a v4.*
+Phase 6.5 (notification abstraction layer), a full status correction after
+a code-evidence sweep (§3.3), and Phase 15 (Flutter rewrite scoping). This
+document is the living plan going forward — update it in place rather than
+creating a v4.*

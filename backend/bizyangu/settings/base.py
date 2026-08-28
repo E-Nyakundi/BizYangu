@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'apps.notifications',
     'apps.customers',
     'apps.knowledge',
+    'apps.messaging',  # Phase 6.5 — provider-agnostic SMS/OTP layer
 ]
 
 MIDDLEWARE = [
@@ -208,6 +209,28 @@ AT_API_KEY = config('AT_API_KEY', default='')
 # BizYangu_Path_to_Pilot.md). Blank = AT's shared default sender,
 # unchanged from before this setting existed.
 AT_SENDER_ID = config('AT_SENDER_ID', default='')
+
+# MobiWave (Phase 6.5 — second SMS provider)
+# NOTE: request/response shape in apps/messaging/adapters/mobiwave.py is
+# a placeholder pending MobiWave's real API docs — see that file's
+# docstring. Leave MOBIWAVE_API_KEY unset until those docs are in hand;
+# an unset key makes the adapter fail cleanly and NotificationService
+# will skip straight to the next provider in SMS_PROVIDER_PRIORITY.
+MOBIWAVE_API_KEY = config('MOBIWAVE_API_KEY', default='')
+MOBIWAVE_SENDER_ID = config('MOBIWAVE_SENDER_ID', default='')
+
+# Phase 6.5 — SMS provider priority/failover order. NotificationService
+# (apps/messaging/service.py) tries each in order until one succeeds.
+# Defaults to AT-only so any environment that hasn't set this yet behaves
+# exactly like before this phase existed. Once MobiWave's real API is
+# confirmed working, change this to e.g. ['mobiwave', 'africastalking']
+# to make it primary with AT as fallback — a settings change, not a code
+# change.
+SMS_PROVIDER_PRIORITY = config(
+    'SMS_PROVIDER_PRIORITY',
+    default='africastalking',
+    cast=lambda v: [name.strip() for name in v.split(',') if name.strip()],
+)
 
 # M-Pesa Daraja
 MPESA_CONSUMER_KEY = config('MPESA_CONSUMER_KEY', default='')

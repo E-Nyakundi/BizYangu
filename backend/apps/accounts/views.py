@@ -29,13 +29,13 @@ from .serializers import (
 from .services import (
     clear_auth_cookies,
     get_tokens_for_user,
-    send_otp_sms,
     set_auth_cookies,
     ACCESS_COOKIE_NAME,
     REFRESH_COOKIE_NAME,
 )
 from .throttles import OTPRateThrottle
 from apps.core.messages import MESSAGES
+from apps.messaging.service import send_otp  # Phase 6.5 — replaces send_otp_sms
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -66,9 +66,13 @@ def otp_request(request):
         logger.warning('[DEV BYPASS] OTP request for %s — use 000000 to verify', phone)
     else:
         token_instance, plaintext_otp = OTPToken.create_for_phone(phone)
-        sent = send_otp_sms(phone, plaintext_otp)
+        sent = send_otp(phone, plaintext_otp)
         if not sent:
-            logger.warning('OTP SMS failed for %s — check AT credentials', phone)
+            logger.warning(
+                'OTP SMS failed for %s — all configured providers in '
+                'SMS_PROVIDER_PRIORITY failed, see SMSDeliveryLog for '
+                'per-provider detail', phone,
+            )
 
     return Response(
         {'detail': MESSAGES['OTP_SENT'].format(phone=phone)},
