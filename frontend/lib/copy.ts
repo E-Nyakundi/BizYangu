@@ -41,6 +41,9 @@ export const COPY = {
   LOGIN_TAGLINE: 'Your business in your hands',
   LOGIN_DESCRIPTION: 'The business management system for Kenyan entrepreneurs.',
   LOGIN_OTP_SENT_TO: 'We sent an OTP to',
+  LOGIN_OR_DIVIDER: 'or',
+  LOGIN_GOOGLE_BUTTON: 'Continue with Google',
+  LOGIN_GOOGLE_LOADING: 'Signing in...',
 
   // PIN / biometric quick re-entry
   PIN_LOCK_WELCOME_BACK: 'Welcome back',
@@ -809,6 +812,7 @@ export const COPY = {
     INVALID_OTP: 'Invalid code. Please try again.',
     OTP_EXPIRED: 'Code expired. Request a new one.',
     OTP_SEND_ERROR: 'Unable to send OTP. Check your number.',
+    GOOGLE_SIGNIN_ERROR: 'Could not sign in with Google. Please try again or use your phone number.',
     INSUFFICIENT_STOCK: 'Not enough stock available.',
     PAYMENT_FAILED: 'Payment failed. Please try again.',
     PHONE_REQUIRED: 'Phone number is required.',
@@ -918,6 +922,9 @@ export const COPY_SW = {
   LOGIN_CHANGE_NUMBER: '← Badilisha nambari',
   LOGIN_TAGLINE: 'Biashara yako mikononi',
   LOGIN_DESCRIPTION: 'Mfumo wa usimamizi wa biashara kwa wajasiriamali wa Kenya.',
+  LOGIN_OR_DIVIDER: 'au',
+  LOGIN_GOOGLE_BUTTON: 'Endelea na Google',
+  LOGIN_GOOGLE_LOADING: 'Inaingia...',
 
   // PIN / biometric quick re-entry
   PIN_LOCK_WELCOME_BACK: 'Karibu tena',
@@ -1636,6 +1643,7 @@ export const COPY_SW = {
     INVALID_OTP: 'OTP si sahihi.',
     OTP_EXPIRED: 'OTP imeipuka. Omba mpya.',
     OTP_SEND_ERROR: 'Imeshindwa kutuma OTP. Hakiki nambari yako.',
+    GOOGLE_SIGNIN_ERROR: 'Imeshindwa kuingia na Google. Jaribu tena au tumia nambari yako ya simu.',
     INSUFFICIENT_STOCK: 'Hisa haitoshi.',
     PAYMENT_FAILED: 'Malipo hayajafaulu. Jaribu tena.',
     PHONE_REQUIRED: 'Nambari ya simu inahitajika.',

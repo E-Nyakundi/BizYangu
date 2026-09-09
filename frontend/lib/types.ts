@@ -6,7 +6,7 @@ export type UserRole = 'OWNER' | 'MANAGER' | 'CASHIER'
 
 export interface UserProfile {
   id: string
-  phone_number: string
+  phone_number: string | null
   name: string
   first_name: string
   last_name: string

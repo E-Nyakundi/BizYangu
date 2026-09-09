@@ -670,7 +670,7 @@ export default function SettingsPage() {
       {showSubModal && user?.business_id && (
         <SubscriptionPaymentModal
           businessId={user.business_id}
-          defaultPhone={user.phone_number}
+          defaultPhone={user.phone_number ?? ''}
           onClose={() => setShowSubModal(false)}
           onConfirmed={() => {
             fetchMe().then(setUser).catch(() => {})

@@ -16,6 +16,16 @@ const config: CapacitorConfig = {
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },
+    GoogleAuth: {
+      // Web/server client ID — needed so the plugin can request an
+      // idToken audienced for our backend to verify, not just an
+      // Android-only access token. The Android-specific client ID
+      // (tied to this keystore's SHA-1) is passed at GoogleAuth.initialize()
+      // call time instead — see lib/google-auth.ts.
+      scopes: ['profile', 'email'],
+      serverClientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID_WEB,
+      forceCodeForRefreshToken: false,
+    },
   },
 }
 

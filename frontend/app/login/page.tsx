@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { requestOtp, verifyOtp, useAuthStore, apiErrorMessage } from '@/lib/auth'
+import { requestOtp, verifyOtp, googleSignIn, useAuthStore, apiErrorMessage } from '@/lib/auth'
+import { getGoogleSignIn } from '@/lib/google-auth'
 import { goToApp } from '@/lib/post-login'
 import Deepfield from '@/components/deepfield'
 import Logo from '@/components/Logo'
@@ -21,6 +22,67 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [resendIn, setResendIn] = useState(0)
   const resendTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Google sign-in — native shows its own button (calls handleGoogleClick
+  // directly); web renders Google's own branded button into this ref once
+  // Google Identity Services has loaded (see lib/google-auth.ts).
+  const [isNativeGoogle, setIsNativeGoogle] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
+  const webGoogleButtonRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const handle = await getGoogleSignIn()
+      if (cancelled) return
+      setIsNativeGoogle(handle.isNative)
+      if (!handle.isNative && webGoogleButtonRef.current) {
+        try {
+          const idToken = await handle.mountWebButton(webGoogleButtonRef.current)
+          if (!cancelled) await completeGoogleSignIn(idToken)
+        } catch {
+          // User hasn't interacted with the button yet, or GIS failed to
+          // load — the button itself will just not render/respond;
+          // nothing to surface until they actually try it.
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function completeGoogleSignIn(idToken: string) {
+    setError('')
+    setGoogleLoading(true)
+    try {
+      const { user, is_new_user } = await googleSignIn(idToken)
+      setUser(user)
+      if (is_new_user || !user.business_id) {
+        router.push('/setup')
+      } else {
+        await goToApp(router, user)
+      }
+    } catch (err) {
+      setError(apiErrorMessage(err, COPY.ERRORS.GOOGLE_SIGNIN_ERROR))
+    } finally {
+      setGoogleLoading(false)
+    }
+  }
+
+  async function handleNativeGoogleClick() {
+    setError('')
+    setGoogleLoading(true)
+    try {
+      const handle = await getGoogleSignIn()
+      const idToken = await handle.signIn()
+      await completeGoogleSignIn(idToken)
+    } catch (err) {
+      setError(apiErrorMessage(err, COPY.ERRORS.GOOGLE_SIGNIN_ERROR))
+      setGoogleLoading(false)
+    }
+  }
 
   function startResendCountdown() {
     setResendIn(60)
@@ -94,26 +156,48 @@ export default function LoginPage() {
         </div>
 
         {step === 'phone' && (
-          <form onSubmit={handleRequestOtp}>
-            <label htmlFor="phone" style={{ display: 'block', marginBottom: 'var(--sp-2)', fontSize: 'var(--fs-sm)' }}>
-              {COPY.LOGIN_PHONE_LABEL}
-            </label>
-            <input
-              id="phone"
-              className="input"
-              type="tel"
-              inputMode="tel"
-              placeholder={COPY.LOGIN_PHONE_PLACEHOLDER}
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              autoFocus
-              required
-            />
-            {error && <p style={{ color: 'var(--color-error)', fontSize: 'var(--fs-sm)', marginTop: 'var(--sp-3)' }}>{error}</p>}
-            <button type="submit" className="btn-primary" disabled={isLoading} style={{ width: '100%', justifyContent: 'center', marginTop: 'var(--sp-5)' }}>
-              {isLoading ? COPY.LOGIN_LOADING_SEND : COPY.LOGIN_SEND_OTP}
-            </button>
-          </form>
+          <>
+            <div style={{ marginBottom: 'var(--sp-4)' }}>
+              {isNativeGoogle ? (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleNativeGoogleClick}
+                  disabled={googleLoading}
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  {googleLoading ? COPY.LOGIN_GOOGLE_LOADING : COPY.LOGIN_GOOGLE_BUTTON}
+                </button>
+              ) : (
+                <div ref={webGoogleButtonRef} style={{ display: 'flex', justifyContent: 'center', minHeight: 44 }} />
+              )}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', margin: 'var(--sp-4) 0', color: 'var(--color-muted)', fontSize: 'var(--fs-sm)' }}>
+              <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.08)' }} />
+              {COPY.LOGIN_OR_DIVIDER}
+              <div style={{ flex: 1, height: 1, background: 'rgba(255, 255, 255, 0.08)' }} />
+            </div>
+            <form onSubmit={handleRequestOtp}>
+              <label htmlFor="phone" style={{ display: 'block', marginBottom: 'var(--sp-2)', fontSize: 'var(--fs-sm)' }}>
+                {COPY.LOGIN_PHONE_LABEL}
+              </label>
+              <input
+                id="phone"
+                className="input"
+                type="tel"
+                inputMode="tel"
+                placeholder={COPY.LOGIN_PHONE_PLACEHOLDER}
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                autoFocus
+                required
+              />
+              {error && <p style={{ color: 'var(--color-error)', fontSize: 'var(--fs-sm)', marginTop: 'var(--sp-3)' }}>{error}</p>}
+              <button type="submit" className="btn-primary" disabled={isLoading} style={{ width: '100%', justifyContent: 'center', marginTop: 'var(--sp-5)' }}>
+                {isLoading ? COPY.LOGIN_LOADING_SEND : COPY.LOGIN_SEND_OTP}
+              </button>
+            </form>
+          </>
         )}
 
         {step === 'otp' && (

@@ -23,6 +23,13 @@ export async function verifyOtp(
   return data
 }
 
+export async function googleSignIn(
+  idToken: string
+): Promise<{ user: UserProfile; is_new_user: boolean }> {
+  const { data } = await api.post('/auth/google/', { id_token: idToken })
+  return data
+}
+
 export async function fetchMe(): Promise<UserProfile> {
   const { data } = await api.get('/auth/me/')
   return data

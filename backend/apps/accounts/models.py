@@ -15,9 +15,11 @@ from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
-    def create_user(self, phone_number, name, password=None, **extra_fields):
-        if not phone_number:
-            raise ValueError('Phone number is required.')
+    def create_user(self, phone_number=None, name='', password=None, **extra_fields):
+        # phone_number is optional at the manager level so Google-sign-in
+        # users (identified by email/google_sub instead) can be created —
+        # OTP's own call site still always passes a real phone_number, and
+        # the OTP serializer already validated it before we get here.
         user = self.model(phone_number=phone_number, name=name, **extra_fields)
         if password:
             user.set_password(password)
@@ -40,7 +42,13 @@ class User(AbstractBaseUser, PermissionsMixin):
         CASHIER = 'CASHIER', 'Cashier'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    phone_number = models.CharField(max_length=20, unique=True)  # E.164 format
+    # null=True (not just blank) — Google-sign-in users have no phone until
+    # they add one, and a unique index allows any number of NULLs while
+    # still forbidding two real numbers from colliding. USERNAME_FIELD stays
+    # phone_number for the OTP path; Google auth looks users up by
+    # google_sub/email instead (see accounts.views.google_signin), so a
+    # missing phone_number never blocks login for that path.
+    phone_number = models.CharField(max_length=20, unique=True, null=True, blank=True)  # E.164 format
     name = models.CharField(max_length=150)  # kept in sync with first_name/last_name — see save()
 
     # First/last name capture (pre-pilot backlog: "user only recognizable by
@@ -56,6 +64,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     # one up later from Settings, so it's just optional + unique here.
     # null=True so multiple blank rows don't collide on the unique index.
     email = models.EmailField(blank=True, null=True, unique=True)
+
+    # Google's stable per-account subject ID ('sub' claim). Preferred over
+    # keying purely off email because email can theoretically be reused/
+    # changed on Google's side; sub never changes for a given account.
+    # Only ever set by the Google sign-in path.
+    google_sub = models.CharField(max_length=64, unique=True, null=True, blank=True)
 
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.CASHIER)
 

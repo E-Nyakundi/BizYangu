@@ -46,6 +46,13 @@ class OTPVerifySerializer(serializers.Serializer):
         return value
 
 
+class GoogleSignInSerializer(serializers.Serializer):
+    # The ID token from Google Identity Services (web) or the native
+    # Google Sign-In SDK (Capacitor/Flutter) — verified server-side in
+    # the view, never trusted as-is.
+    id_token = serializers.CharField()
+
+
 class PinSetSerializer(serializers.Serializer):
     pin = serializers.RegexField(
         regex=r'^\d{4,6}$',

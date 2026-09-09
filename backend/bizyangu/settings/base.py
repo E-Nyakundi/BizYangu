@@ -233,6 +233,14 @@ SMS_PROVIDER_PRIORITY = config(
 )
 
 # M-Pesa Daraja
+# Google Sign-In — OAuth client ID(s) accepted as the ID token's audience.
+# Comma-separated because web (Next.js) and Android (Capacitor) each need
+# their own OAuth client in Google Cloud Console, but both ID tokens land
+# on the same backend endpoint. See accounts.views.google_signin.
+GOOGLE_OAUTH_CLIENT_IDS = [
+    c.strip() for c in config('GOOGLE_OAUTH_CLIENT_IDS', default='').split(',') if c.strip()
+]
+
 MPESA_CONSUMER_KEY = config('MPESA_CONSUMER_KEY', default='')
 MPESA_CONSUMER_SECRET = config('MPESA_CONSUMER_SECRET', default='')
 MPESA_SHORTCODE = config('MPESA_SHORTCODE', default='174379')

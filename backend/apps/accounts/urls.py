@@ -11,6 +11,9 @@ urlpatterns = [
     path('otp/request/', views.otp_request, name='otp-request'),
     path('otp/verify/', views.otp_verify, name='otp-verify'),
 
+    # Google sign-in — see accounts.views.google_signin
+    path('google/', views.google_signin, name='google-signin'),
+
     # PIN quick re-entry (requires a prior OTP login on this device — see views.pin_verify)
     path('pin/set/', views.pin_set, name='pin-set'),
     path('pin/verify/', views.pin_verify, name='pin-verify'),

@@ -124,6 +124,28 @@ resulting design.
 **No provider has been dropped.** AT stays wired in as-is; this phase adds
 alternatives behind an interface rather than ripping AT out first.
 
+**WhatsApp OTP — investigated, parked, not ruled out.** WhatsApp
+Business Cloud API was considered as a free stand-in while waiting on
+MobiWave's API docs. It is NOT free for OTP: per Meta's own pricing docs
+(developers.facebook.com/documentation/business-messaging/whatsapp/pricing,
+checked directly, not a secondary source), OTP falls under the
+"authentication" template category, billed per-message since July 1,
+2025 — the old free-1,000-conversations tier no longer exists. The only
+genuinely free WhatsApp traffic is customer-initiated service-window
+messages, which doesn't fit a business-initiated OTP send.
+
+Kenya is billed under Meta's **"Rest of Africa"** rate card (a named
+region — confirmed explicitly listed, not lumped into the vague "Other"
+category), so authentication messages to Kenyan numbers do have a real,
+non-placeholder rate — it's just not visible on Meta's public pricing
+page, only in a CSV rate-card download that wasn't fetched/parsed this
+session. **Getting the actual USD figure is the next step if WhatsApp OTP
+comes back up** — either download and read that CSV, or check it live in
+Meta Business Manager. Until then, no cost comparison against AT/MobiWave
+is possible, so this was parked rather than pursued further. Google
+Sign-In (genuinely free, no per-user cost) was also raised as an option
+and remains untried — not built, no code exists for it yet.
+
 ### 3.3 Correction: this document previously understated how much was built
 An earlier version of this plan marked several completed phases as "not
 started" based on a static read of the handoff ZIP that didn't check
@@ -559,9 +581,25 @@ honestly before committing a start date.
   This part of the rewrite is genuinely low-risk.
 
 **Explicitly NOT decided yet — resolve before writing Flutter code:**
-- [ ] **Auth token strategy** — confirm `flutter_secure_storage` +
-      Authorization-header approach (or an alternative) with whoever owns
-      the backend auth flow, since it's a two-sided change
+- [x] **Auth token strategy — decided and backend side implemented.**
+      `flutter_secure_storage` + `Authorization: Bearer <token>` header,
+      not a cookie-jar workaround (JWT itself was never web-only — only
+      the httpOnly-cookie *delivery* mechanism was; JWTs are a completely
+      normal choice for a native app). Backend change: `otp_verify`,
+      `pin_verify`, and `token_refresh` in `apps/accounts/views.py` now
+      also return `{'tokens': {...}}` in the JSON body alongside the
+      existing cookies, and `pin_verify`/`token_refresh` accept the
+      refresh token from the request body (`{"refresh": "..."}`) as a
+      fallback when no cookie is present. Web/Capacitor behavior is
+      completely unchanged — they never send that field, so the fallback
+      never triggers for them. `JWTCookieAuthentication` already fell
+      back to the `Authorization` header for every other endpoint, so
+      this was the only gap. **Flutter-side work still to do:** wire
+      `flutter_secure_storage` to persist the `tokens` object from these
+      three responses, and build the HTTP client interceptor that
+      attaches `Authorization: Bearer <access_token>` on every request
+      and calls `/api/v1/auth/token/refresh/` (sending the stored refresh
+      token in the body) when a request 401s.
 - [ ] **State management approach** for Flutter (Riverpod, Bloc, provider,
       or other) — pick one before the first page is built, not discovered
       ad hoc per screen
@@ -569,7 +607,8 @@ honestly before committing a start date.
       the current endpoints were shaped for a Next.js/fetch consumer; audit
       whether any response shapes assumed browser-side behavior (e.g.
       cookie-based auth context implicitly available) that a Flutter
-      client can't assume
+      client can't assume. The three auth endpoints are now handled (see
+      above) — this item covers everything else.
 - [ ] **Testing strategy for the cutover** — a full rewrite of this much
       business logic needs a real plan for confirming behavioral parity
       (e.g. a checklist per page: reconciliation queue, refund flow,

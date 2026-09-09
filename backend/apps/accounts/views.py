@@ -19,6 +19,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import OTPToken, StaffInvite
 from .permissions import IsOwner
 from .serializers import (
+    GoogleSignInSerializer,
     OTPRequestSerializer,
     OTPVerifySerializer,
     PinSetSerializer,
@@ -89,7 +90,9 @@ def otp_verify(request):
     POST /api/v1/auth/otp/verify/
     Verify OTP. On success:
     - Creates the user if they don't exist (new user → no business yet).
-    - Issues JWT pair as httpOnly cookies.
+    - Issues JWT pair as httpOnly cookies (web/Capacitor), and also in
+      the response body's 'tokens' key (Flutter, Phase 15 — no cookie
+      jar to rely on, see BizYangu_Master_Plan.md Phase 15).
     - Returns user profile.
     """
     serializer = OTPVerifySerializer(data=request.data)
@@ -145,10 +148,127 @@ def otp_verify(request):
     tokens = get_tokens_for_user(user)
     profile = UserProfileSerializer(user).data
 
+    # Phase 15 — Flutter has no cookie jar to auto-attach httpOnly cookies
+    # the way a browser/Capacitor webview does, so tokens are also
+    # returned in the body here. Web/Capacitor clients keep working
+    # exactly as before via the cookie set below; they simply ignore
+    # this extra 'tokens' key. Flutter reads it, stores both values in
+    # flutter_secure_storage, and attaches the access token as
+    # Authorization: Bearer <token> on every subsequent request — see
+    # BizYangu_Master_Plan.md Phase 15 for the full rationale.
     response = Response(
         {
             'user': profile,
             'is_new_user': created,
+            'tokens': tokens,
+        },
+        status=status.HTTP_200_OK,
+    )
+    set_auth_cookies(response, tokens)
+    return response
+
+
+# ── Google sign-in ───────────────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def google_signin(request):
+    """
+    POST /api/v1/auth/google/
+    Body: { id_token: '...' }
+    Verifies a Google ID token (from Google Identity Services on web, or
+    the native Google Sign-In SDK inside the Capacitor/Flutter shells),
+    then get-or-creates a user by the token's stable 'sub' claim and logs
+    them in exactly like otp_verify — same cookie-setting, same response
+    shape (user / is_new_user / tokens) — so the frontend can treat this
+    as a second entry point into the same post-login flow (goToApp /
+    /setup redirect), not a separate auth system.
+
+    Unlike OTP users, a Google user has no phone_number at all until they
+    add one later from Settings — see the accounts.User docstring note on
+    phone_number being nullable specifically for this path.
+    """
+    from google.oauth2 import id_token as google_id_token
+    from google.auth.transport import requests as google_requests
+
+    serializer = GoogleSignInSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    raw_token = serializer.validated_data['id_token']
+
+    client_ids = getattr(settings, 'GOOGLE_OAUTH_CLIENT_IDS', [])
+    if not client_ids:
+        logger.error('Google sign-in attempted but GOOGLE_OAUTH_CLIENT_IDS is not configured')
+        return Response(
+            {'detail': MESSAGES['GOOGLE_SIGNIN_NOT_CONFIGURED']},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    idinfo = None
+    last_error = None
+    # A token is minted for exactly one audience (one OAuth client), so try
+    # each configured client ID (web, Android) until one verifies.
+    for client_id in client_ids:
+        try:
+            idinfo = google_id_token.verify_oauth2_token(
+                raw_token, google_requests.Request(), client_id,
+            )
+            break
+        except ValueError as exc:
+            last_error = exc
+            continue
+
+    if idinfo is None:
+        logger.warning('Google ID token verification failed: %s', last_error)
+        return Response(
+            {'detail': MESSAGES['GOOGLE_SIGNIN_INVALID_TOKEN']},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not idinfo.get('email_verified', False):
+        return Response(
+            {'detail': MESSAGES['GOOGLE_SIGNIN_EMAIL_NOT_VERIFIED']},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    google_sub = idinfo['sub']
+    email = idinfo.get('email', '')
+
+    user = User.objects.filter(google_sub=google_sub).first()
+    created = False
+
+    if user is None:
+        # Not seen this Google account before. If the email already
+        # belongs to an existing (e.g. OTP-created) user, link this
+        # Google account onto it instead of creating a duplicate person —
+        # same phone number, same business, now also sign-in-able via
+        # Google. Otherwise create a brand-new user, same shape as a
+        # brand-new OTP user (no business yet → frontend sends them to
+        # /setup).
+        user = User.objects.filter(email=email).first() if email else None
+        if user is None:
+            user = User.objects.create_user(
+                phone_number=None,
+                name=idinfo.get('name', '') or '',
+                first_name=idinfo.get('given_name', '') or '',
+                last_name=idinfo.get('family_name', '') or '',
+                email=email or None,
+                role=User.Role.OWNER,
+            )
+            created = True
+        user.google_sub = google_sub
+        user.save(update_fields=['google_sub'])
+
+    user.last_login = timezone.now()
+    user.save(update_fields=['last_login'])
+
+    tokens = get_tokens_for_user(user)
+    profile = UserProfileSerializer(user).data
+
+    response = Response(
+        {
+            'user': profile,
+            'is_new_user': created,
+            'tokens': tokens,  # Phase 15 — see otp_verify's comment
         },
         status=status.HTTP_200_OK,
     )
@@ -189,18 +309,24 @@ def pin_set(request):
 def pin_verify(request):
     """
     POST /api/v1/auth/pin/verify/
-    Body: { pin: '1234' }
+    Body: { pin: '1234' } — plus { refresh: '...' } for clients with no
+    cookie jar (Flutter, Phase 15).
     No access token required — reads the refresh token from the same
-    httpOnly cookie token_refresh uses. On success, rotates both cookies
-    exactly like token_refresh does, and returns the user profile like
-    otp_verify does, so the frontend can treat this as a drop-in
-    alternative login path.
+    httpOnly cookie token_refresh uses, falling back to the body's
+    'refresh' field. On success, rotates both cookies exactly like
+    token_refresh does (and also returns the new pair in the body's
+    'tokens' key), and returns the user profile like otp_verify does, so
+    the frontend can treat this as a drop-in alternative login path.
     """
     serializer = PinVerifySerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     submitted_pin = serializer.validated_data['pin']
 
-    refresh_token = request.COOKIES.get(REFRESH_COOKIE_NAME)
+    # Phase 15 — Flutter has no cookie to read the refresh token from, so
+    # it sends it in the request body instead: {"pin": "...", "refresh":
+    # "..."}. Cookie is checked first so web/Capacitor clients (which
+    # never send this field) are completely unaffected.
+    refresh_token = request.COOKIES.get(REFRESH_COOKIE_NAME) or request.data.get('refresh')
     if not refresh_token:
         return Response(
             {'detail': MESSAGES['PIN_SESSION_NOT_FOUND']},
@@ -250,7 +376,11 @@ def pin_verify(request):
     user.save(update_fields=['last_login'])
 
     response = Response(
-        {'detail': MESSAGES['PIN_VERIFIED'], 'user': UserProfileSerializer(user).data},
+        {
+            'detail': MESSAGES['PIN_VERIFIED'],
+            'user': UserProfileSerializer(user).data,
+            'tokens': new_tokens,  # Phase 15 — see otp_verify's comment
+        },
         status=status.HTTP_200_OK,
     )
     set_auth_cookies(response, new_tokens)
@@ -264,9 +394,15 @@ def pin_verify(request):
 def token_refresh(request):
     """
     POST /api/v1/auth/token/refresh/
-    Reads refresh token from httpOnly cookie, issues new access + refresh pair.
+    Reads refresh token from httpOnly cookie, or from the request body's
+    'refresh' field for clients with no cookie jar (Flutter, Phase 15).
+    Issues new access + refresh pair, returned as cookies AND in the
+    response body's 'tokens' key.
     """
-    refresh_token = request.COOKIES.get(REFRESH_COOKIE_NAME)
+    # Phase 15 — Flutter sends the refresh token in the body instead of a
+    # cookie: {"refresh": "..."}. Checked after the cookie so web/
+    # Capacitor behavior is unchanged.
+    refresh_token = request.COOKIES.get(REFRESH_COOKIE_NAME) or request.data.get('refresh')
     if not refresh_token:
         return Response(
             {'detail': MESSAGES['REFRESH_TOKEN_NOT_FOUND']},
@@ -293,7 +429,10 @@ def token_refresh(request):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
-    response = Response({'detail': MESSAGES['TOKEN_REFRESHED']}, status=status.HTTP_200_OK)
+    response = Response(
+        {'detail': MESSAGES['TOKEN_REFRESHED'], 'tokens': tokens},  # Phase 15
+        status=status.HTTP_200_OK,
+    )
     set_auth_cookies(response, tokens)
     return response
 

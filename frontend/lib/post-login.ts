@@ -46,7 +46,7 @@ async function enterDashboard(router: Router): Promise<void> {
   useAuthStore.getState().setUser(current)
 
   if (current.has_pin) {
-    await setPinEnabledOnDevice(true, current.name || current.phone_number)
+    await setPinEnabledOnDevice(true, current.name || current.phone_number || '')
     setSessionUnlocked(true)
   }
   router.push('/dashboard')
@@ -78,7 +78,7 @@ export async function goToApp(router: Router, user: UserProfile | null): Promise
     return
   }
 
-  await setPinEnabledOnDevice(true, current.name || current.phone_number)
+  await setPinEnabledOnDevice(true, current.name || current.phone_number || '')
   setSessionUnlocked(true)
   router.push('/dashboard')
 }

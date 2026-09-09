@@ -29,7 +29,10 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const original = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
-    const isAuthRoute = original?.url?.includes('/auth/otp/') || original?.url?.includes('/auth/token/refresh/')
+    const isAuthRoute =
+      original?.url?.includes('/auth/otp/') ||
+      original?.url?.includes('/auth/google/') ||
+      original?.url?.includes('/auth/token/refresh/')
 
     if (error.response?.status === 401 && !original._retry && !isAuthRoute) {
       original._retry = true
