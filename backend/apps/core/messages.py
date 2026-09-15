@@ -79,6 +79,10 @@ MESSAGES = {
     'PRODUCT_DELETED': 'Product deleted successfully.',
     'PRODUCTS_NOT_FOUND': 'No products found.',
     'CATEGORY_WRONG_BUSINESS': 'This category does not belong to your business.',
+
+    # Shared product identity (barcode resolve/candidate/verify)
+    'GLOBAL_PRODUCT_ALREADY_EXISTS': 'This barcode is already known. Try scanning again.',
+    'GLOBAL_PRODUCT_NOT_FOUND': 'No known product found for this barcode.',
     'CSV_FILE_REQUIRED': 'Upload a CSV file (key: "file").',
     'CSV_INVALID_FORMAT': 'File must be in .csv format.',
     'CSV_FILE_TOO_LARGE': 'File too large. Limit is {max_size}MB.',
@@ -282,6 +286,10 @@ MESSAGES_SW = {
     'PRODUCT_DELETED': 'Bidhaa imefutwa.',
     'PRODUCTS_NOT_FOUND': 'Hakuna bidhaa.',
     'CATEGORY_WRONG_BUSINESS': 'Kategoria hii si ya biashara yako.',
+
+    # Shared product identity (barcode resolve/candidate/verify)
+    'GLOBAL_PRODUCT_ALREADY_EXISTS': 'Bakodi hii tayari inajulikana. Jaribu kuiskani tena.',
+    'GLOBAL_PRODUCT_NOT_FOUND': 'Hakuna bidhaa inayojulikana kwa bakodi hii.',
     'CSV_FILE_REQUIRED': 'Tuma faili ya CSV (key: "file").',
     'CSV_INVALID_FORMAT': 'Faili lazima iwe ya muundo .csv.',
     'CSV_FILE_TOO_LARGE': 'Faili kubwa mno. Kikomo ni {max_size}MB.',

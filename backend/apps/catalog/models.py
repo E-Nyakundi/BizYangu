@@ -98,6 +98,16 @@ class Product(models.Model):
     name = models.CharField(max_length=200)
     sku = models.CharField(max_length=50, blank=True)
     barcode = models.CharField(max_length=100, blank=True)
+    # Optional link to this barcode's shared cross-business identity
+    # (apps.products.GlobalProduct) — additive, doesn't touch existing
+    # rows. `barcode` above stays the business's own scanned/entered
+    # value; this FK is set when that barcode resolved to (or created)
+    # a GlobalProduct, per apps/products/models.py's design note on
+    # keeping shared identity and per-business stock data separate.
+    global_product = models.ForeignKey(
+        'products.GlobalProduct', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='business_products',
+    )
     selling_price = models.DecimalField(max_digits=12, decimal_places=2)
     cost_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     unit = models.CharField(max_length=10, choices=Unit.choices, default=Unit.PIECE)

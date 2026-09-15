@@ -13,6 +13,7 @@ export interface ProductCreatePayload {
   low_stock_threshold?: string
   unit?: string
   category?: string
+  barcode?: string
   // Find-or-create by name — used by taxonomy-driven onboarding, which
   // only knows a taxonomy category's display name, never a pre-existing
   // Category id. Ignored if `category` (an id) is also given.

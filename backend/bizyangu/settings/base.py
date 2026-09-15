@@ -37,6 +37,7 @@ INSTALLED_APPS = [
     'apps.customers',
     'apps.knowledge',
     'apps.messaging',  # Phase 6.5 — provider-agnostic SMS/OTP layer
+    'apps.products',  # Shared barcode product identity (resolve/candidate/verify)
 ]
 
 MIDDLEWARE = [

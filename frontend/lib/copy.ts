@@ -436,6 +436,14 @@ export const COPY = {
   STOCK_NEW_SUBMIT: 'Add product',
   STOCK_NEW_SAVE_ANOTHER: 'Add + another',
   STOCK_NEW_SAVED_TOAST: 'Saved! Add another?',
+  STOCK_NEW_SCAN_BUTTON: 'Scan barcode',
+  STOCK_NEW_BARCODE_LABEL: 'Barcode',
+  STOCK_NEW_BARCODE_RESOLVING: 'Checking this barcode…',
+  STOCK_NEW_BARCODE_FOUND: 'Found — details filled in below.',
+  STOCK_NEW_CANDIDATE_TITLE: 'Possible product found',
+  STOCK_NEW_CANDIDATE_BODY: 'Another BizYangu business previously identified this barcode as this product. Is this what you\'re scanning?',
+  STOCK_NEW_CANDIDATE_CONFIRM: 'Yes, that\'s it',
+  STOCK_NEW_CANDIDATE_REJECT: 'No, different product',
 
   // Full product-detail edit screen (dedicated page, reached from the
   // Stock drawer — build-plan item C8).

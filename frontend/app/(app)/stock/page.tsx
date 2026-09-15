@@ -18,6 +18,14 @@ import {
 } from '@/lib/inventory'
 import { createSale, listUnreconciled, resolveUnreconciled, type UnreconciledGroup } from '@/lib/transactions'
 import { createProduct, listProducts, listCategories, type CategoryOption } from '@/lib/catalog'
+import {
+  resolveBarcode,
+  createCandidate,
+  verifyGlobalProduct,
+  type GlobalProduct,
+  type ResolutionState,
+} from '@/lib/products'
+import ScannerButton from '@/components/scanner/ScannerButton'
 import { PRODUCT_UNITS, productUnitLabel, fetchTaxonomy } from '@/lib/knowledge'
 import { fetchBusiness } from '@/lib/business'
 import { groupByCategory } from '@/lib/grouping'
@@ -325,6 +333,77 @@ function AddProductModal({ onClose, onDone }: {
   const [error, setError] = useState('')
   const [justSaved, setJustSaved] = useState(false)
 
+  // ── Barcode resolve/candidate flow ──────────────────────────────────────
+  // barcode: the raw value, scanned or typed. resolutionState tracks what
+  // the backend's shared GlobalProduct lookup said about it last time it
+  // was checked — reset to null whenever the barcode field changes, since
+  // a stale resolution for a different barcode must never be acted on.
+  // candidate holds the KNOWN_CANDIDATE result while we're waiting on the
+  // user's yes/no; it is NOT auto-filled into the form — see design note
+  // on handleCandidateConfirm below.
+  const [barcode, setBarcode] = useState('')
+  const [resolutionState, setResolutionState] = useState<ResolutionState | null>(null)
+  const [resolving, setResolving] = useState(false)
+  const [candidate, setCandidate] = useState<GlobalProduct | null>(null)
+  // True once this submission's barcode came back UNRESOLVED — on submit,
+  // the product this business types in becomes the candidate's first
+  // contributor (services.create_candidate on the backend), not just an
+  // isolated product record. False for FOUND_INTERNAL/KNOWN_CANDIDATE
+  // (those already have or will get their own candidate/verification row)
+  // and for products added with no barcode at all.
+  const isNewCandidate = resolutionState === 'UNRESOLVED' && barcode.trim().length > 0
+
+  async function handleBarcodeValue(value: string) {
+    setBarcode(value)
+    setCandidate(null)
+    setResolutionState(null)
+    if (!value.trim()) return
+    setResolving(true)
+    try {
+      const result = await resolveBarcode(value.trim())
+      setResolutionState(result.state)
+      if (result.state === 'FOUND_INTERNAL' && result.global_product) {
+        // Trusted (VERIFIED) — safe to auto-fill directly, no prompt.
+        // This modal has no separate brand field, so fold brand into
+        // the name (matching how a shopkeeper would write it by hand,
+        // e.g. "Coca-Cola 500ml") rather than dropping it silently.
+        const gp = result.global_product
+        setName(gp.brand ? `${gp.brand} ${gp.name}` : gp.name)
+        if (gp.unit) setUnit(gp.unit)
+      } else if (result.state === 'KNOWN_CANDIDATE') {
+        // Not yet trusted — show the confirm/dispute prompt, don't fill
+        // the form until the user answers. See handleCandidateConfirm.
+        setCandidate(result.global_product)
+      }
+      // UNRESOLVED: nothing to fill — user proceeds with manual entry
+      // below, and their submission becomes this barcode's first
+      // candidate (see isNewCandidate / handleSubmit).
+    } catch {
+      // Resolution is a convenience, not a blocker — if it fails, the
+      // user can still type everything in manually and submit normally.
+      setResolutionState(null)
+    } finally {
+      setResolving(false)
+    }
+  }
+
+  function handleCandidateConfirm(matches: boolean) {
+    if (!candidate) return
+    if (matches) {
+      setName(candidate.brand ? `${candidate.brand} ${candidate.name}` : candidate.name)
+      if (candidate.unit) setUnit(candidate.unit)
+      setResolutionState('FOUND_INTERNAL')
+    } else {
+      // Rejecting leaves the form empty for the user to fill in their
+      // own details — that becomes conflicting evidence on submit via
+      // verifyGlobalProduct(matches_existing: false), not a silent
+      // overwrite of the existing candidate.
+      setResolutionState('UNRESOLVED')
+    }
+    setCandidate(null)
+  }
+
+
   // ── Category picker (item 9 fix) ────────────────────────────────────────
   // Previously this modal never sent a category at all, so anything added
   // here landed uncategorized regardless of the business's taxonomy. Now
@@ -353,6 +432,7 @@ function AddProductModal({ onClose, onDone }: {
   function resetForm() {
     setName(''); setPrice(''); setCost(''); setQty(''); setThreshold('')
     setCategoryKey(''); setNewCategoryName(''); setSubcategoryId('')
+    setBarcode(''); setResolutionState(null); setCandidate(null)
   }
 
   async function handleSubmit(addAnother: boolean) {
@@ -373,16 +453,50 @@ function AddProductModal({ onClose, onDone }: {
               taxonomy_subcategory_id: subcategoryId || undefined,
             }
           : {}
-      await createProduct({
+      const product = await createProduct({
         name: name.trim(),
         selling_price: price.trim(),
         cost_price: cost.trim() || undefined,
         current_stock: qty.trim() || '0',
         low_stock_threshold: threshold.trim() || undefined,
         unit,
+        barcode: barcode.trim() || undefined,
         created_via: 'manual',
         ...categoryFields,
       })
+      // Barcode resolution is best-effort alongside product creation —
+      // the product itself is already saved above regardless of what
+      // happens here, so a failure here must never surface as though
+      // the whole Add Product action failed.
+      if (barcode.trim()) {
+        try {
+          if (isNewCandidate) {
+            // First business to identify this barcode — becomes its
+            // contributor, not its owner (see lib/products.ts).
+            await createCandidate({
+              barcode: barcode.trim(),
+              name: product.name,
+              unit,
+            })
+          } else if (resolutionState === 'UNRESOLVED' && candidate === null) {
+            // Reached via "No, different product" on a KNOWN_CANDIDATE —
+            // this business's own details are conflicting evidence
+            // against the existing candidate, not a fresh one.
+            await verifyGlobalProduct(barcode.trim(), {
+              matches_existing: false,
+              name: product.name,
+              unit,
+            })
+          } else if (resolutionState === 'FOUND_INTERNAL') {
+            // Either it was already VERIFIED, or the user confirmed a
+            // KNOWN_CANDIDATE via "Yes, that's it" — either way this
+            // business's confirmation is additional evidence.
+            await verifyGlobalProduct(barcode.trim(), { matches_existing: true })
+          }
+        } catch {
+          // Non-fatal — see comment above.
+        }
+      }
       onDone()
       if (addAnother) {
         resetForm()
@@ -405,6 +519,54 @@ function AddProductModal({ onClose, onDone }: {
       <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-4)' }}>
         {COPY.STOCK_NEW_PRODUCT_SUBTITLE}
       </p>
+
+      <Field label={COPY.STOCK_NEW_BARCODE_LABEL}>
+        <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+          <input className="input" type="text" placeholder="616110..."
+            value={barcode} onChange={(e) => handleBarcodeValue(e.target.value)}
+            style={{ flex: 1 }} />
+          <ScannerButton
+            title={COPY.SCANNER_PRODUCT_TITLE}
+            onDetected={(text) => handleBarcodeValue(text)}
+          />
+        </div>
+        {resolving && (
+          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginTop: 'var(--sp-1)' }}>
+            {COPY.STOCK_NEW_BARCODE_RESOLVING}
+          </p>
+        )}
+        {resolutionState === 'FOUND_INTERNAL' && !resolving && (
+          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-teal)', marginTop: 'var(--sp-1)' }}>
+            {COPY.STOCK_NEW_BARCODE_FOUND}
+          </p>
+        )}
+      </Field>
+
+      {candidate && (
+        <div style={{
+          background: 'var(--surface-2)', border: '1px solid var(--surface-4)',
+          borderRadius: 'var(--radius-default)', padding: 'var(--sp-3)',
+          marginBottom: 'var(--sp-3)',
+        }}>
+          <p style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, marginBottom: 'var(--sp-1)' }}>
+            {COPY.STOCK_NEW_CANDIDATE_TITLE}
+          </p>
+          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-2)' }}>
+            {candidate.brand ? `${candidate.brand} ` : ''}{candidate.name}
+          </p>
+          <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', marginBottom: 'var(--sp-3)' }}>
+            {COPY.STOCK_NEW_CANDIDATE_BODY}
+          </p>
+          <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+            <button className="btn-secondary btn-sm" onClick={() => handleCandidateConfirm(false)} style={{ flex: 1 }}>
+              {COPY.STOCK_NEW_CANDIDATE_REJECT}
+            </button>
+            <button className="btn-primary btn-sm" onClick={() => handleCandidateConfirm(true)} style={{ flex: 1 }}>
+              {COPY.STOCK_NEW_CANDIDATE_CONFIRM}
+            </button>
+          </div>
+        </div>
+      )}
 
       <Field label={COPY.STOCK_NEW_NAME_LABEL}>
         <input className="input" type="text" placeholder={COPY.STOCK_NEW_NAME_PLACEHOLDER}
