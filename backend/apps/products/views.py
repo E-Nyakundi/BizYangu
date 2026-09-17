@@ -24,6 +24,7 @@ from .serializers import (
     ResolveBarcodeRequestSerializer,
     VerifyGlobalProductSerializer,
 )
+from .tasks import discover_barcode_via_web
 
 
 def get_business_or_404(request):
@@ -56,6 +57,15 @@ def resolve_barcode(request):
     serializer.is_valid(raise_exception=True)
 
     state, gp = services.resolve_barcode(serializer.validated_data['barcode'])
+    if state == services.ResolutionState.UNRESOLVED:
+        # Fire-and-forget: resolve_barcode()'s synchronous contract is
+        # unchanged (still returns UNRESOLVED immediately below) — this
+        # only queues background work so a LATER scan of the same
+        # barcode (by this business or another) can benefit from
+        # whatever webcrawl.discover() finds. See apps/products/tasks.py
+        # module docstring for the full execution model and
+        # barcode-webcrawl-resolution-scoping.md §4.6.
+        discover_barcode_via_web.delay(serializer.validated_data['barcode'])
     return Response({
         'state': state,
         'global_product': GlobalProductSerializer(gp).data if gp else None,

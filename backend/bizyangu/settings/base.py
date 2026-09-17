@@ -243,6 +243,17 @@ GOOGLE_OAUTH_CLIENT_IDS = [
     c.strip() for c in config('GOOGLE_OAUTH_CLIENT_IDS', default='').split(',') if c.strip()
 ]
 
+# Google Programmable Search Engine (Custom Search JSON API) — web-
+# search-assisted barcode discovery, see apps/products/webcrawl.py and
+# barcode-webcrawl-resolution-scoping.md. Blank means
+# webcrawl._search_google() logs a warning and returns [], which
+# discover() treats the same as "no results" — i.e. an unconfigured
+# environment degrades to UNRESOLVED-only behavior exactly like before
+# this phase existed, same pattern as MOBIWAVE_API_KEY's blank-default
+# fallback above.
+GOOGLE_CSE_API_KEY = config('GOOGLE_CSE_API_KEY', default='')
+GOOGLE_CSE_ENGINE_ID = config('GOOGLE_CSE_ENGINE_ID', default='')
+
 MPESA_CONSUMER_KEY = config('MPESA_CONSUMER_KEY', default='')
 MPESA_CONSUMER_SECRET = config('MPESA_CONSUMER_SECRET', default='')
 MPESA_SHORTCODE = config('MPESA_SHORTCODE', default='174379')
