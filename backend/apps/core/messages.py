@@ -219,6 +219,11 @@ MESSAGES = {
     'PRODUCT_UNIT_NO_SELLING_PRICE': "No selling price set for '{unit}' — add one on the product's units first.",
     'PRODUCT_UNIT_INSUFFICIENT_STOCK': "Not enough '{unit}' of '{name}' in stock. Remaining: {remaining}, requested: {requested}.",
 
+    # Offline sync (Phase 5)
+    'SYNC_UNKNOWN_OPERATION_TYPE': "Unknown sync operation type '{op_type}'.",
+    'SYNC_BUSINESS_REQUIRED': 'Your account is not linked to a business — cannot sync.',
+    'SYNC_CLIENT_ID_REQUIRED': 'Each sync operation must include a client_id.',
+
     # Generic
     'SUCCESS': 'Operation completed successfully.',
     'ERROR': 'An error occurred. Please try again.',
@@ -425,6 +430,11 @@ MESSAGES_SW = {
     'PRODUCT_UNIT_NOT_SELLABLE': 'Aina hii haipatikani kwa kuuza.',
     'PRODUCT_UNIT_NO_SELLING_PRICE': "Hakuna bei ya kuuza iliyowekwa kwa '{unit}' — weka bei kwenye aina za bidhaa kwanza.",
     'PRODUCT_UNIT_INSUFFICIENT_STOCK': "Hisa ya '{unit}' ya '{name}' haitoshi. Iliyobaki: {remaining}, Ulioomba: {requested}.",
+
+    # Offline sync (Phase 5)
+    'SYNC_UNKNOWN_OPERATION_TYPE': "Aina ya operesheni ya usawazishaji '{op_type}' haijulikani.",
+    'SYNC_BUSINESS_REQUIRED': 'Akaunti yako haijaunganishwa na biashara — haiwezi kusawazisha.',
+    'SYNC_CLIENT_ID_REQUIRED': 'Kila operesheni ya usawazishaji lazima iwe na client_id.',
 
     # Generic
     'SUCCESS': 'Kitendo kimefaulu.',

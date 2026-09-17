@@ -181,13 +181,13 @@ class TransactionSerializer(serializers.ModelSerializer):
             'id', 'type', 'reference_number', 'total_amount',
             'payment_method', 'payment_status', 'mpesa_reference',
             'cash_amount', 'mpesa_amount', 'credit_amount', 'customer',
-            'notes', 'created_by', 'created_by_name', 'created_at',
+            'notes', 'created_by', 'created_by_name', 'created_at', 'updated_at',
             'is_voided', 'void_reason', 'original_transaction', 'refunded_amount',
             'items',
         ]
         read_only_fields = [
             'id', 'reference_number', 'total_amount', 'created_by',
-            'created_by_name', 'created_at', 'is_voided', 'void_reason',
+            'created_by_name', 'created_at', 'updated_at', 'is_voided', 'void_reason',
             'original_transaction', 'refunded_amount',
             'cash_amount', 'mpesa_amount', 'credit_amount',
         ]

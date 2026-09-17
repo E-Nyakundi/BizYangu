@@ -42,6 +42,7 @@ class Transaction(models.Model):
     notes = models.TextField(blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='transactions')
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     is_voided = models.BooleanField(default=False)
     void_reason = models.TextField(blank=True)
     void_by = models.ForeignKey(
@@ -78,6 +79,20 @@ class Transaction(models.Model):
     cash_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     mpesa_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     credit_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Phase 5 (offline sync) — set only for transactions created via
+    # apps.sync.views.push, never for ones created through the live
+    # /transactions/sale/ endpoint (those stay null). Lets push retry
+    # safely: a device that never received a push response (lost on the
+    # way back, app killed mid-request, etc.) will retry the same queued
+    # operation with the same client-generated key. Without this field,
+    # that retry would create a second, duplicate sale — the "at least
+    # once" delivery any offline queue has to assume is possible becomes
+    # "at most once from the server's point of view" only because this
+    # field turns a retried push into a lookup instead of a second create.
+    # Null + unique (not blank+unique) so ordinary live sales, which
+    # never set it, don't collide with each other under a unique
+    # constraint the way blank='' strings would.
+    sync_idempotency_key = models.CharField(max_length=100, null=True, blank=True, unique=True)
 
     class Meta:
         ordering = ['-created_at']

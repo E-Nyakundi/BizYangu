@@ -11,8 +11,8 @@ class CustomerSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Customer
-        fields = ['id', 'name', 'phone', 'notes', 'balance', 'oldest_unpaid_at', 'created_at', 'is_active']
-        read_only_fields = ['id', 'balance', 'oldest_unpaid_at', 'created_at']
+        fields = ['id', 'name', 'phone', 'notes', 'balance', 'oldest_unpaid_at', 'created_at', 'updated_at', 'is_active']
+        read_only_fields = ['id', 'balance', 'oldest_unpaid_at', 'created_at', 'updated_at']
 
     def get_balance(self, obj):
         return str(customer_balance(obj))

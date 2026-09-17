@@ -21,6 +21,7 @@ from apps.core.messages import MESSAGES
 from apps.inventory.models import StockMovement
 from apps.reports.consumers import notify_dashboard
 from .models import Transaction, TransactionItem
+from .services import record_sale, SaleError
 User = get_user_model()
 
 from .serializers import (
@@ -73,6 +74,10 @@ def create_sale(request):
     POST /api/v1/transactions/sale/
     Record a sale. Validates stock availability, creates Transaction + items,
     and deducts stock via signal (transactions/models.py post_save).
+
+    Thin wrapper around services.record_sale() (Phase 5 offline-sync
+    extraction) — the actual logic is shared with the sync push endpoint,
+    which calls record_sale() directly with no request object.
     """
     business, err = get_business_or_404(request)
     if err:
@@ -80,263 +85,11 @@ def create_sale(request):
 
     serializer = SaleCreateSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    data = serializer.validated_data
 
-    # Resolve products and check stock
-    line_items = []
-    total = Decimal('0.00')
-
-    for item_data in data['items']:
-        qty = item_data['quantity']
-
-        if item_data.get('product_unit_id'):
-            # Sale against one specific sellable form of a product (C10) —
-            # a stick rather than the pack, a gorogoro rather than the bag.
-            # product is derived from the unit itself; there's no separate
-            # product_id on this shape (validated in the serializer).
-            try:
-                unit = ProductUnit.objects.select_related('product', 'parent').get(
-                    id=item_data['product_unit_id'],
-                    product__business=business,
-                    product__is_active=True,
-                )
-            except ProductUnit.DoesNotExist:
-                return Response(
-                    {'detail': MESSAGES['PRODUCT_UNIT_NOT_FOUND']},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if not unit.is_sellable:
-                return Response(
-                    {'detail': MESSAGES['PRODUCT_UNIT_NOT_SELLABLE']},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            if unit.selling_price is None:
-                return Response(
-                    {'detail': MESSAGES['PRODUCT_UNIT_NO_SELLING_PRICE'].format(unit=unit.get_unit_display())},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            available = unit.available_quantity()
-            if available < qty:
-                return Response(
-                    {
-                        'detail': MESSAGES['PRODUCT_UNIT_INSUFFICIENT_STOCK'].format(
-                            name=unit.product.name, unit=unit.get_unit_display(),
-                            remaining=available, requested=qty,
-                        )
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            subtotal = qty * unit.selling_price
-            total += subtotal
-            line_items.append({
-                'product': unit.product,
-                'product_unit': unit,
-                'name': '',
-                'is_reconciled': True,
-                'quantity': qty,
-                'unit_price': unit.selling_price,
-                'cost_price': unit.product.cost_price,
-                'subtotal': subtotal,
-            })
-            continue
-
-        if not item_data.get('product_id'):
-            # Not-in-catalog item: no Product to resolve, no stock to check,
-            # no StockMovement to create — it's just a name + price the
-            # cashier typed in (sell/page.tsx addCustomToCart).
-            subtotal = qty * item_data['unit_price']
-            total += subtotal
-            line_items.append({
-                'product': None,
-                'product_unit': None,
-                'name': item_data['name'],
-                'is_reconciled': False,
-                'quantity': qty,
-                'unit_price': item_data['unit_price'],
-                'cost_price': None,
-                'subtotal': subtotal,
-            })
-            continue
-
-        try:
-            product = Product.objects.get(
-                id=item_data['product_id'],
-                business=business,
-                is_active=True,
-            )
-        except Product.DoesNotExist:
-            return Response(
-                {'detail': MESSAGES['PRODUCT_NOT_FOUND_WITH_ID'].format(product_id=item_data['product_id'])},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if product.track_stock and product.current_stock < qty:
-            return Response(
-                {
-                    'detail': MESSAGES['INSUFFICIENT_STOCK_DETAIL'].format(
-                        name=product.name, remaining=product.current_stock, requested=qty
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        subtotal = qty * product.selling_price
-        total += subtotal
-        line_items.append({
-            'product': product,
-            'product_unit': None,
-            'name': '',
-            'is_reconciled': True,
-            'quantity': qty,
-            'unit_price': product.selling_price,
-            'cost_price': product.cost_price,
-            'subtotal': subtotal,
-        })
-
-    # ── Resolve split-payment breakdown (item D13) ──────────────────────
-    # Every SALE gets a real cash/mpesa/credit breakdown now, not just a
-    # payment_method tag. For single-method sales the full total goes into
-    # the one matching column; MIXED is the only case where the client's
-    # own numbers are used, and even then only after they're checked
-    # against the server-computed total — never trust a client total.
-    method = data['payment_method']
-    if method == Transaction.PaymentMethod.MIXED:
-        cash_amount = data.get('cash_amount') or Decimal('0.00')
-        mpesa_amount = data.get('mpesa_amount') or Decimal('0.00')
-        credit_amount = data.get('credit_amount') or Decimal('0.00')
-        if (cash_amount + mpesa_amount + credit_amount) != total:
-            return Response(
-                {'detail': MESSAGES['MIXED_PAYMENT_AMOUNTS_MISMATCH'].format(total=total)},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-    else:
-        cash_amount = total if method == Transaction.PaymentMethod.CASH else Decimal('0.00')
-        mpesa_amount = total if method == Transaction.PaymentMethod.MPESA else Decimal('0.00')
-        credit_amount = total if method == Transaction.PaymentMethod.CREDIT else Decimal('0.00')
-
-    # ── Resolve customer for the credit portion (item D16) ──────────────
-    customer = None
-    if credit_amount > 0:
-        from apps.customers.models import Customer
-        customer_id = data.get('customer_id')
-        customer_name = data.get('customer_name', '').strip()
-        if customer_id:
-            try:
-                customer = Customer.objects.get(id=customer_id, business=business, is_active=True)
-            except Customer.DoesNotExist:
-                return Response(
-                    {'detail': MESSAGES['CUSTOMER_NOT_FOUND']},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-        elif customer_name:
-            customer_phone = data.get('customer_phone', '').strip()
-            # Same get-or-create-by-phone shape the Creditors "Add
-            # customer" flow uses — a repeat customer paying on credit
-            # again shouldn't fork into a second ledger row just because
-            # the cashier retyped their name slightly differently, as
-            # long as the phone number matches.
-            if customer_phone:
-                customer, _ = Customer.objects.get_or_create(
-                    business=business, phone=customer_phone,
-                    defaults={'name': customer_name},
-                )
-            else:
-                customer = Customer.objects.create(business=business, name=customer_name)
-        else:
-            return Response(
-                {'detail': MESSAGES['CREDIT_CUSTOMER_REQUIRED']},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-    with db_transaction.atomic():
-        txn = Transaction.objects.create(
-            business=business,
-            type=Transaction.Type.SALE,
-            total_amount=total,
-            payment_method=data['payment_method'],
-            cash_amount=cash_amount,
-            mpesa_amount=mpesa_amount,
-            credit_amount=credit_amount,
-            customer=customer,
-            # M-Pesa sales start PENDING — the STK push hasn't been sent yet,
-            # let alone confirmed by the customer. The callback (or manual
-            # reconciliation) flips this to CONFIRMED. Every other payment
-            # method is confirmed on the spot since cash/credit/mixed have
-            # no separate confirmation step.
-            payment_status=(
-                Transaction.PaymentStatus.PENDING
-                if data['payment_method'] == Transaction.PaymentMethod.MPESA
-                else Transaction.PaymentStatus.CONFIRMED
-            ),
-            mpesa_reference=data.get('mpesa_reference', ''),
-            notes=data.get('notes', ''),
-            created_by=request.user,
-        )
-
-        for li in line_items:
-            TransactionItem.objects.create(
-                transaction=txn,
-                product=li['product'],
-                product_unit=li.get('product_unit'),
-                name=li['name'],
-                is_reconciled=li['is_reconciled'],
-                quantity=li['quantity'],
-                unit_price=li['unit_price'],
-                cost_price=li['cost_price'],
-                subtotal=li['subtotal'],
-            )
-            # Stock deduction happens via post_save signal in transactions/models.py
-            # But the signal fires on Transaction.create, before items exist.
-            # So we handle stock + movement manually here for correctness.
-            # li['product'] is None for not-in-catalog items — nothing to
-            # deduct or track for those, skip straight past.
-            if li.get('product_unit'):
-                # C10 sale-flow integration: deduct from whichever ancestor
-                # in the unit tree actually holds the counter for this
-                # pool (see ProductUnit.deduct_sale), not Product.current_stock
-                # — that's a separate pool this branch never touches. No
-                # low-stock notification here either: it's keyed off
-                # Product.current_stock/low_stock_threshold, neither of
-                # which changed for this line.
-                unit = li['product_unit']
-                qty_before, qty_after = unit.deduct_sale(li['quantity'])
-                StockMovement.objects.create(
-                    business=business,
-                    product=li['product'],
-                    product_unit=unit,
-                    transaction=txn,
-                    movement_type=StockMovement.MovementType.SALE,
-                    quantity_change=qty_after - qty_before,
-                    quantity_before=qty_before,
-                    quantity_after=qty_after,
-                    created_by=request.user,
-                )
-            elif li['product'] and li['product'].track_stock:
-                qty_before = li['product'].current_stock
-                status_before = li['product'].stock_status
-                qty_after = qty_before - li['quantity']
-                li['product'].current_stock = qty_after
-                li['product'].save(update_fields=['current_stock'])
-                StockMovement.objects.create(
-                    business=business,
-                    product=li['product'],
-                    transaction=txn,
-                    movement_type=StockMovement.MovementType.SALE,
-                    quantity_change=-li['quantity'],
-                    quantity_before=qty_before,
-                    quantity_after=qty_after,
-                    created_by=request.user,
-                )
-                _notify_if_crossed_threshold(li['product'], status_before)
-
-    notify_dashboard(business.id, 'sale')
-
-    from apps.reports.services import check_sale_milestones
-    check_sale_milestones(business)
+    try:
+        txn = record_sale(business, request.user, serializer.validated_data)
+    except SaleError as e:
+        return Response({'detail': e.detail}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response(
         TransactionSerializer(txn).data,
