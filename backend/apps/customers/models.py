@@ -33,6 +33,17 @@ class Customer(models.Model):
     phone = models.CharField(max_length=20, blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Phase 5 (offline sync) — Customer is a genuinely mutable record
+    # (name/phone/notes/is_active can all be edited after creation),
+    # unlike CustomerPayment which is append-only. A pull-sync keyed on
+    # "changed since timestamp X" needs this to notice an edited
+    # customer, not just a newly-created one. Column already exists in
+    # the database via migration 0002_customer_updated_at — this
+    # declaration was missing from the model despite that, which broke
+    # CustomerSerializer (lists 'updated_at' in Meta.fields) and
+    # apps.sync.services.PULL_MODELS['customers'] (filters/orders on
+    # it) with a FieldError. Restored to match 0002 exactly.
+    updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:

@@ -16,13 +16,30 @@ acceptance-test barcodes from §6 verified against the real evidence in
   for `ExternalSource` + `GlobalProduct.web_sources` M2M.
 
 ## Files requiring a hand-applied patch (existing files with history)
-- `models_patch.py` → edits to `apps/products/models.py`
-- `views_patch.py` → edits to `apps/products/views.py`
-- `admin_patch.py` → edits to `apps/products/admin.py`
+- `models_patch.py` → edits to `apps/products/models.py` — **applied 2026-09-22.**
+- `views_patch.py` → edits to `apps/products/views.py` — already applied.
+- `admin_patch.py` → edits to `apps/products/admin.py` — **applied 2026-09-22.**
 
-Each is a `PATCH NOTES` doc, not code to import — apply the described
-edit directly, since these touch files with real migration/git history
-you'll want to review as a diff rather than have overwritten wholesale.
+Each is a `PATCH NOTES` doc, not code to import — the described edit
+was applied directly to the target file rather than importing these.
+
+**2026-09-22 — drift found and fixed:** `models_patch.py` and
+`admin_patch.py` had NOT actually been applied despite migration
+`0002_web_search_discovery` (which creates the `ExternalSource` table
+and `GlobalProduct.web_sources` M2M column) already having run in
+production. This was live-breaking, not dormant: `tasks.py`'s
+`gp.web_sources.add(source)` call raised `AttributeError` on every
+run of `discover_barcode_via_web` (dispatched from `resolve_barcode()`
+on every UNRESOLVED scan), and `ExternalSource` had no admin
+registration. Both patches are now applied for real — no new
+migration was needed, since the underlying columns already existed;
+this was purely model/admin code catching up to a schema that was
+already live. Caught via Django's `migrate` startup check flagging
+`models(customers, messaging, products)` as having changes not
+reflected in a migration; `messaging` was a false positive (its
+model matches its migration exactly) — the real drift was confined to
+`customers.Customer.updated_at` (same category of bug, unrelated app,
+fixed the same session) and this file's two patches.
 
 ## Settings / env
 Add to `bizyangu/settings/base.py` (see `views_patch.py`'s second half

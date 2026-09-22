@@ -7,12 +7,12 @@ which answers "what does *this* business sell it for, and how much do
 they have" — see the design note in resolve-barcode's view docstring for
 why those two questions must never be merged into one model.
 
-Scope for this pass (smallest safe slice, per the barcode-resolution
-design doc): internal candidate/consensus loop only. No external web
-search / Google discovery layer yet — GlobalProduct.source has a
-WEB_SEARCH choice reserved for that follow-up phase, but nothing in this
-app populates it today. No ExternalSource/reliability-tracking model
-either, for the same reason — build it once the internal loop is proven.
+Scope for this pass: internal candidate/consensus loop, plus the
+web-search discovery layer (see webcrawl.py and
+barcode-webcrawl-resolution-scoping.md) that creates CANDIDATEs from
+external evidence when nothing internal exists yet. That layer never
+bypasses this app's own confirm/dispute loop — see webcrawl.py's
+module docstring for the trust-boundary rule.
 """
 
 import uuid
@@ -71,6 +71,23 @@ class GlobalProduct(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # Recorded at candidate-creation time (create_web_candidate(), see
+    # webcrawl.py/tasks.py) so a CANDIDATE created from web search can
+    # later be traced back to which domain(s) contributed to it —
+    # needed for ExternalSource.hits_confirmed/hits_disputed
+    # bookkeeping once a candidate resolves. M2M rather than a single
+    # FK because multiple corroborating domains can feed one candidate
+    # (e.g. an aggregator hit AND a retailer hit both contributing to
+    # the same candidate). Column already exists in the database via
+    # migration 0002_web_search_discovery — this declaration was
+    # missing from the model despite that (see models_patch.py, never
+    # applied), which broke tasks.discover_barcode_via_web's
+    # gp.web_sources.add(source) call with an AttributeError on every
+    # run.
+    web_sources = models.ManyToManyField(
+        'ExternalSource', blank=True, related_name='candidates',
+    )
+
     def __str__(self):
         return f'{self.barcode} — {self.name}'
 
@@ -113,3 +130,15 @@ class GlobalProductVerification(models.Model):
     def __str__(self):
         verdict = 'confirms' if self.matches_existing else 'disputes'
         return f'{self.business} {verdict} {self.global_product.barcode}'
+
+
+# Kept in its own module (models_external_source.py) rather than
+# inline above — see that file's docstring for why — but re-exported
+# here so `from apps.products.models import ExternalSource` keeps
+# working for admin.py/serializers.py/tasks.py without those callers
+# needing to know it lives in a second file. Import must come after
+# GlobalProduct is defined above, since GlobalProduct.web_sources
+# references 'ExternalSource' by string (lazy reference) but Django
+# still needs the class importable from this module by the time apps
+# are loaded.
+from .models_external_source import ExternalSource  # noqa: E402,F401
