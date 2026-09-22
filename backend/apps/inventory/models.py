@@ -49,6 +49,14 @@ class StockMovement(models.Model):
     notes = models.TextField(blank=True)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='stock_movements')
     created_at = models.DateTimeField(auto_now_add=True)
+    # Phase 5 (offline sync) — set only for movements created via
+    # apps.sync.views.push (currently: an offline stock count), never
+    # for ones created through the live endpoint (those stay null).
+    # Mirrors Transaction.sync_idempotency_key's exact purpose: lets a
+    # device retry a push whose response it never received without
+    # creating a second, duplicate movement. See that field's own
+    # comment in apps/transactions/models.py for the full rationale.
+    sync_idempotency_key = models.CharField(max_length=100, null=True, blank=True, unique=True)
 
     class Meta:
         ordering = ['-created_at']

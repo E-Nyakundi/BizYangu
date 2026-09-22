@@ -14,6 +14,7 @@ from rest_framework.response import Response
 from apps.accounts.permissions import IsNotExpired, IsOwnerOrManager
 from apps.catalog.models import Product, ProductUnit
 from apps.core.messages import MESSAGES
+from . import services
 from .models import StockMovement, RepackageEvent
 from .serializers import (
     StockMovementSerializer,
@@ -148,6 +149,10 @@ def submit_stock_count(request):
     Submit a physical stock count. Sets current_stock to counted_quantity
     and records a COUNT movement for the audit trail.
     Body: { product_id, counted_quantity, notes? }
+
+    Thin wrapper around services.record_stock_count() (Phase 5
+    offline-sync extraction) — shared with the sync push endpoint,
+    which calls record_stock_count() directly with no request object.
     """
     business, err = get_business_or_404(request)
     if err:
@@ -156,41 +161,16 @@ def submit_stock_count(request):
     serializer = StockCountSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
-    product_id = serializer.validated_data['product_id']
-    counted_qty = serializer.validated_data['counted_quantity']
-    notes = serializer.validated_data.get('notes', '')
-
     try:
-        product = Product.objects.get(id=product_id, business=business, is_active=True)
-    except Product.DoesNotExist:
-        return Response(
-            {'detail': MESSAGES['PRODUCT_NOT_FOUND']},
-            status=status.HTTP_404_NOT_FOUND,
+        movement = services.record_stock_count(
+            business,
+            request.user,
+            serializer.validated_data['product_id'],
+            serializer.validated_data['counted_quantity'],
+            serializer.validated_data.get('notes', ''),
         )
-
-    qty_before = product.current_stock
-    status_before = product.stock_status
-    product.current_stock = counted_qty
-    product.save(update_fields=['current_stock'])
-
-    movement = StockMovement.objects.create(
-        business=business,
-        product=product,
-        movement_type=StockMovement.MovementType.COUNT,
-        quantity_change=counted_qty - qty_before,
-        quantity_before=qty_before,
-        quantity_after=counted_qty,
-        notes=notes or MESSAGES['STOCK_COUNT_NOTE'].format(quantity=counted_qty),
-        created_by=request.user,
-    )
-
-    status_after = product.stock_status
-    if status_after in ('LOW', 'OUT') and status_after != status_before:
-        try:
-            from apps.notifications.services import notify_low_stock
-            notify_low_stock(product, status_after)
-        except Exception:
-            logger.exception('Low-stock notification failed for product %s', product.id)
+    except services.StockCountError as e:
+        return Response({'detail': e.detail}, status=e.status_code)
 
     return Response(
         {
