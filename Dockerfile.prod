@@ -1,0 +1,45 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System deps for psycopg2 and psql CLI
+RUN apt-get update && apt-get install -y \
+    libpq-dev gcc postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements/production.txt requirements/production.txt
+COPY requirements/base.txt requirements/base.txt
+RUN pip install --no-cache-dir -r requirements/production.txt
+
+COPY . .
+
+# Static files are collected at image build time, not on every container
+# start — DJANGO_SETTINGS_MODULE must be set to bizyangu.settings.production
+# (or whatever your prod module is called) as a build-time env var for this
+# to read the right STATIC_ROOT/STORAGES config.
+ENV DJANGO_SETTINGS_MODULE=bizyangu.settings.production
+ENV SECRET_KEY=build-time-placeholder-overridden-at-runtime
+ENV DB_PASSWORD=build-time-placeholder-overridden-at-runtime
+ENV ALLOWED_HOSTS=build-time-placeholder-overridden-at-runtime
+ENV CORS_ALLOWED_ORIGINS=build-time-placeholder-overridden-at-runtime
+ENV CSRF_TRUSTED_ORIGINS=build-time-placeholder-overridden-at-runtime
+ENV FRONTEND_URL=build-time-placeholder-overridden-at-runtime
+RUN python manage.py collectstatic --noinput
+
+EXPOSE 8000
+
+# daphne, not gunicorn alone — apps.payments and apps.reports use Django
+# Channels (WebSocket consumers for live payment/report updates), which
+# needs an ASGI server. Migrate runs here rather than baked into the image
+# so it always runs against whatever DB the container is actually pointed
+# at when it starts, not whatever was configured at build time.
+#
+# check_production_settings.py runs first as a startup guard: it fails
+# the container immediately and loudly if DJANGO_SETTINGS_MODULE ever
+# resolves to anything other than production (e.g. this image's own ENV
+# above gets overridden by a docker-compose `environment:` block, or this
+# Dockerfile is copied as a base for a different service without
+# adjusting it) — the alternative is a prod container silently serving
+# with DEBUG=True and no CSRF/CORS enforcement, discovered only after
+# the fact.
+CMD ["sh", "-c", "python check_production_settings.py && python manage.py migrate --noinput && daphne -b 0.0.0.0 -p 8000 bizyangu.asgi:application"]
