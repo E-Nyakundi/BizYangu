@@ -106,6 +106,14 @@ class RepackageEvent(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='repackage_events',
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    # Phase 5 (offline sync) — set only for events created through
+    # apps.sync.views.push (an offline repackage), never for ones
+    # created through the live endpoint (those stay null). Mirrors
+    # StockMovement.sync_idempotency_key's exact purpose: lets a device
+    # retry a push whose response it never received without creating a
+    # second, duplicate event. See that field's own comment for the
+    # full rationale.
+    sync_idempotency_key = models.CharField(max_length=100, null=True, blank=True, unique=True)
 
     class Meta:
         ordering = ['-created_at']

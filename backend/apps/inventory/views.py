@@ -213,107 +213,30 @@ def repackage_list_create(request):
     serializer.is_valid(raise_exception=True)
     data = serializer.validated_data
 
+    # Phase 5 (offline sync): the actual validation/stock-write/audit
+    # logic now lives in services.record_repackage() so the offline
+    # push handler (apps.sync.services) can call the exact same code
+    # path a live submission does. See that function's docstring for
+    # the full behaviour — this view's job is now just running the
+    # serializer, calling the service, and translating RepackageError
+    # into the same Response shape this endpoint always returned.
     try:
-        from_unit = ProductUnit.objects.select_related('product').get(
-            id=data['from_unit_id'], product__business=business,
-        )
-    except ProductUnit.DoesNotExist:
-        return Response({'detail': MESSAGES['REPACKAGE_FROM_UNIT_NOT_FOUND']}, status=status.HTTP_404_NOT_FOUND)
-
-    try:
-        to_unit = ProductUnit.objects.select_related('product', 'parent').get(
-            id=data['to_unit_id'], product__business=business,
-        )
-    except ProductUnit.DoesNotExist:
-        return Response({'detail': MESSAGES['REPACKAGE_TO_UNIT_NOT_FOUND']}, status=status.HTTP_404_NOT_FOUND)
-
-    # Same checks as RepackageEvent.clean() — done here first so a bad
-    # pairing comes back as a normal 400 with a specific message rather
-    # than a generic ValidationError from .full_clean() below.
-    if from_unit.product_id != to_unit.product_id:
-        return Response({'detail': MESSAGES['REPACKAGE_DIFFERENT_PRODUCTS']}, status=status.HTTP_400_BAD_REQUEST)
-    if not to_unit.is_repackaged:
-        return Response({'detail': MESSAGES['REPACKAGE_TO_UNIT_NOT_REPACKAGED']}, status=status.HTTP_400_BAD_REQUEST)
-    if to_unit.parent_id != from_unit.id:
-        return Response({'detail': MESSAGES['REPACKAGE_WRONG_PARENT']}, status=status.HTTP_400_BAD_REQUEST)
-
-    quantity_consumed = data['quantity_consumed']
-    quantity_produced = data['quantity_produced']
-
-    available = from_unit.available_quantity()
-    if quantity_consumed > available:
-        return Response(
-            {
-                'detail': MESSAGES['REPACKAGE_INSUFFICIENT_STOCK'].format(
-                    unit=from_unit.get_unit_display(), available=available, requested=quantity_consumed,
-                )
-            },
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # expected_yield/loss_quantity are stored at the ratio in effect right
-    # now — see RepackageEvent's docstring for why this isn't computed on
-    # read. A negative loss_quantity (produced more than the theoretical
-    # yield) is left as-is rather than clamped to zero: that's a real
-    # signal the ratio the owner entered is off and worth surfacing, not
-    # hiding.
-    expected_yield = (quantity_consumed * to_unit.ratio_to_parent).quantize(Decimal('0.001'))
-    loss_quantity = (expected_yield - quantity_produced).quantize(Decimal('0.001'))
-
-    with db_transaction.atomic():
-        from_before = from_unit.available_quantity()
-        from_unit.deduct_sale(quantity_consumed)
-        from_after = from_unit.available_quantity()
-
-        to_before = to_unit.stock_quantity
-        to_unit.stock_quantity = to_unit.stock_quantity + quantity_produced
-        to_unit.save(update_fields=['stock_quantity', 'updated_at'])
-
-        event = RepackageEvent.objects.create(
-            business=business,
-            from_unit=from_unit,
-            to_unit=to_unit,
-            quantity_consumed=quantity_consumed,
-            quantity_produced=quantity_produced,
-            expected_yield=expected_yield,
-            loss_quantity=loss_quantity,
+        event = services.record_repackage(
+            business,
+            request.user,
+            data['from_unit_id'],
+            data['to_unit_id'],
+            data['quantity_consumed'],
+            data['quantity_produced'],
             notes=data.get('notes', ''),
-            performed_by=request.user,
         )
+    except services.RepackageError as e:
+        return Response({'detail': e.detail}, status=e.status_code)
 
-        StockMovement.objects.create(
-            business=business,
-            product=from_unit.product,
-            product_unit=from_unit,
-            movement_type=StockMovement.MovementType.REPACKAGE_OUT,
-            quantity_change=-quantity_consumed,
-            quantity_before=from_before,
-            quantity_after=from_after,
-            notes=MESSAGES['STOCK_MOVEMENT_REPACKAGE_OUT_NOTE'].format(to_unit=to_unit.get_unit_display()),
-            created_by=request.user,
-        )
-        StockMovement.objects.create(
-            business=business,
-            product=to_unit.product,
-            product_unit=to_unit,
-            movement_type=StockMovement.MovementType.REPACKAGE_IN,
-            quantity_change=quantity_produced,
-            quantity_before=to_before,
-            quantity_after=to_unit.stock_quantity,
-            notes=MESSAGES['STOCK_MOVEMENT_REPACKAGE_IN_NOTE'].format(from_unit=from_unit.get_unit_display()),
-            created_by=request.user,
-        )
-
-        # Built inside the atomic block, same fix as settle_payment() /
-        # create_refund() / void_transaction() in transactions/views.py —
-        # a missing MESSAGES key or serializer error here rolls the whole
-        # repackage back instead of committing it silently behind a 500.
-        response_payload = {
-            'detail': MESSAGES['REPACKAGE_RECORDED'],
-            'event': RepackageEventSerializer(event).data,
-        }
-
-    return Response(response_payload, status=status.HTTP_201_CREATED)
+    return Response(
+        {'detail': MESSAGES['REPACKAGE_RECORDED'], 'event': RepackageEventSerializer(event).data},
+        status=status.HTTP_201_CREATED,
+    )
 
 
 # Same rate-throttle tier as transactions/views.py's money/stock-moving
