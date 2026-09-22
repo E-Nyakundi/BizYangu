@@ -37,9 +37,17 @@ class SMSDeliveryLog(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        # Explicit names, matching migration 0001_initial's
+        # auto-generated ones exactly — Django's makemigrations --check
+        # compares index state by name, and an unnamed Index() here
+        # gets re-derived from current model state rather than reading
+        # back what the migration actually recorded, which is what was
+        # producing this app's spurious "changes not yet reflected in
+        # a migration" drift warning (fields matched exactly; only the
+        # index names were being silently re-inferred and disagreeing).
         indexes = [
-            models.Index(fields=['provider_name', 'created_at']),
-            models.Index(fields=['phone_number', 'created_at']),
+            models.Index(fields=['provider_name', 'created_at'], name='messaging_s_provide_9c1a4e_idx'),
+            models.Index(fields=['phone_number', 'created_at'], name='messaging_s_phone_n_6f2b3d_idx'),
         ]
 
     def __str__(self):
