@@ -7,6 +7,7 @@ urlpatterns = [
     path('mpesa/callback/', views.stk_callback, name='mpesa-callback'),
     path('mpesa/c2b/confirmation/', views.c2b_confirmation, name='mpesa-c2b-confirmation'),
     path('mpesa/c2b/validation/', views.c2b_validation, name='mpesa-c2b-validation'),
+    path('mpesa/sms-confirmation/', views.sms_confirmation, name='mpesa-sms-confirmation'),
     path('mpesa/transactions/', views.mpesa_transaction_list, name='mpesa-transactions'),
     path('mpesa/reconcile/', views.reconcile, name='mpesa-reconcile'),
 

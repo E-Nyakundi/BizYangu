@@ -25,6 +25,7 @@ from .serializers import (
     BusinessMpesaCredentialsSerializer,
     MPesaTransactionSerializer,
     ReconcileSerializer,
+    SmsConfirmationRequestSerializer,
     STKPushRequestSerializer,
     STKRequestSerializer,
     SubscriptionPaymentRequestSerializer,
@@ -190,6 +191,62 @@ def c2b_validation(request):
     — declining here would block the customer's payment outright.
     """
     return _daraja_ack()
+
+
+# ── SMS reconciliation (authenticated — device self-reports its own SMS) ───────
+# Deliberately NOT the AllowAny/safaricom_ip_required pattern above: there is
+# no Safaricom-to-BizYangu channel for this, only the till owner's own phone
+# reporting what its own SMS inbox received. See
+# PHASE_6_SMS_RECONCILIATION_HANDOFF.md for the full trust-model rationale.
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsNotExpired])
+def sms_confirmation(request):
+    """
+    POST /api/v1/payments/mpesa/sms-confirmation/
+    Body: { sms_text }
+
+    The device sends the raw M-Pesa confirmation SMS text as-is (no
+    client-side pre-parsing — see sms_parser.py). Always returns 200
+    with a `recorded` flag: a non-"received" SMS (sent, withdrawal,
+    failed, or unrecognized) is not an error, it's just not
+    reconciliation-relevant, and the on-device SMS-consent listener
+    will see plenty of those in normal use. A duplicate submission of
+    an SMS already recorded is also not an error — it returns the
+    existing row (idempotent on the receipt number, same as C2B).
+    """
+    business, error = get_business_or_404(request)
+    if error:
+        return error
+
+    serializer = SmsConfirmationRequestSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    try:
+        mpesa_txn, parsed = services.process_sms_confirmation(
+            serializer.validated_data['sms_text'], business,
+        )
+    except Exception:
+        logger.exception('Failed to process SMS confirmation for business %s', business.id)
+        return Response(
+            {'detail': MESSAGES.get('SMS_CONFIRMATION_FAILED', 'Could not process SMS.')},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    if mpesa_txn is None:
+        return Response(
+            {'recorded': False, 'classification': parsed.classification.value, 'reason': parsed.reason},
+            status=status.HTTP_200_OK,
+        )
+
+    return Response(
+        {
+            'recorded': True,
+            'classification': parsed.classification.value,
+            'transaction': MPesaTransactionSerializer(mpesa_txn).data,
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 # ── Subscription billing (authenticated — business paying BizYangu) ────────────

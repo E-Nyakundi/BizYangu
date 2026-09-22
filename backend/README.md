@@ -36,10 +36,28 @@ migration was needed, since the underlying columns already existed;
 this was purely model/admin code catching up to a schema that was
 already live. Caught via Django's `migrate` startup check flagging
 `models(customers, messaging, products)` as having changes not
-reflected in a migration; `messaging` was a false positive (its
-model matches its migration exactly) — the real drift was confined to
-`customers.Customer.updated_at` (same category of bug, unrelated app,
-fixed the same session) and this file's two patches.
+reflected in a migration; `messaging` was a second, unrelated drift
+(see below) — the fix here was confined to `customers.Customer.updated_at`
+(fixed the same session, different app) and this file's two patches.
+
+**Confirmed fixed in production (2026-09-22, same day):** rebuild after
+this fix dropped `products` from the migration drift warning entirely.
+
+**2026-09-22 (same day) — second drift, `apps.messaging`, found and fixed:**
+Initially misdiagnosed as a false positive (fields matched the migration
+exactly) — the real drift was in `Meta.indexes`: `models.py` declared
+`models.Index(fields=[...])` with no explicit `name=`, while migration
+`0001_initial.py` recorded the two indexes under Django's auto-generated
+names (`messaging_s_provide_9c1a4e_idx`, `messaging_s_phone_n_6f2b3d_idx`).
+Django's `makemigrations --check` compares index state by name, and an
+unnamed declaration gets silently re-derived rather than matched against
+what the migration actually recorded. Fixed by adding the matching
+explicit `name=` to both `Index()` declarations in `apps/messaging/models.py`.
+**Confirmed fixed in production**: the following rebuild cleared the
+migration-drift warning entirely — `customers`, `messaging`, and
+`products` all now report `No migrations to apply.` with no drift
+complaint. This closes out the migration-drift item; no further action
+needed before Phase 6 work begins.
 
 ## Settings / env
 Add to `bizyangu/settings/base.py` (see `views_patch.py`'s second half

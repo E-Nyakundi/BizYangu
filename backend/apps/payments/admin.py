@@ -33,7 +33,7 @@ class MPesaTransactionAdmin(admin.ModelAdmin):
         'mpesa_receipt_number', 'business', 'phone_number', 'amount',
         'transaction_type', 'is_matched', 'is_reconciled', 'created_at',
     )
-    list_filter = ('transaction_type', 'is_matched', 'is_reconciled')
+    list_filter = ('transaction_type', 'is_matched', 'is_reconciled')  # SMS shows up alongside C2B/STK_PUSH/B2C here
     search_fields = ('mpesa_receipt_number', 'phone_number', 'business__name')
     readonly_fields = [f.name for f in MPesaTransaction._meta.fields]
     ordering = ('-created_at',)

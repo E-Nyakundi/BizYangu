@@ -64,6 +64,15 @@ class MPesaTransactionSerializer(serializers.ModelSerializer):
         ]
 
 
+class SmsConfirmationRequestSerializer(serializers.Serializer):
+    """
+    Input for POST /mpesa/sms-confirmation/. Deliberately just the raw
+    string — see sms_parser.py docstring for why all format handling
+    stays server-side rather than the app pre-parsing fields.
+    """
+    sms_text = serializers.CharField(max_length=1000, allow_blank=False, trim_whitespace=False)
+
+
 class ReconcileSerializer(serializers.Serializer):
     mpesa_transaction_id = serializers.UUIDField()
     transaction_id = serializers.UUIDField()

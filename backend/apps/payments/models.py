@@ -65,6 +65,7 @@ class MPesaTransaction(models.Model):
         C2B = 'C2B', 'Customer to Business'
         STK_PUSH = 'STK_PUSH', 'STK Push'
         B2C = 'B2C', 'Business to Customer'
+        SMS = 'SMS', 'SMS Reconciliation'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     business = models.ForeignKey('business.Business', on_delete=models.PROTECT, related_name='mpesa_transactions')

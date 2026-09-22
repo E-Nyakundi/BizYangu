@@ -28,6 +28,7 @@ from apps.inventory.models import StockMovement
 from . import daraja
 from .daraja import DarajaError  # noqa: F401 — re-exported for views.py
 from .models import MPesaSTKRequest, MPesaTransaction, SubscriptionPayment
+from .sms_parser import parse_mpesa_sms, SmsClassification
 
 logger = logging.getLogger(__name__)
 
@@ -376,6 +377,65 @@ def process_c2b_confirmation(payload: dict, business) -> MPesaTransaction:
 
     _try_auto_match(mpesa_txn)
     return mpesa_txn
+
+
+def process_sms_confirmation(raw_sms_text: str, business) -> tuple:
+    """
+    Handles an M-Pesa confirmation SMS forwarded by the business's own
+    device (not a Daraja server callback — see the module docstring in
+    sms_parser.py and PHASE_6_SMS_RECONCILIATION_HANDOFF.md for why
+    this has to be a separate path from process_c2b_confirmation).
+
+    Trust model is different from C2B on purpose: the caller (view) is
+    responsible for authenticating the request as the business's own
+    logged-in device (IsAuthenticated), not an IP allowlist — there is
+    no Safaricom-to-BizYangu channel here, only the phone self-reporting
+    what its own SMS inbox received.
+
+    Returns (MPesaTransaction | None, ParsedSms). The MPesaTransaction
+    is None whenever the SMS wasn't a "received" message (sent,
+    withdrawal, failed, or unrecognized) — that's an expected, common
+    outcome, not an error; the caller should respond success either
+    way and use the ParsedSms.reason for logging/diagnostics, exactly
+    like the "ignore validation" spirit of c2b_validation. Idempotent
+    on the receipt number, same pattern as process_c2b_confirmation:
+    a retried/duplicate submission of the same SMS returns the
+    existing row rather than erroring or double-recording.
+    """
+    parsed = parse_mpesa_sms(raw_sms_text)
+
+    if parsed.classification != SmsClassification.RECEIVED:
+        logger.info(
+            'SMS confirmation for business %s not reconciliation-relevant (%s): %s',
+            business.id, parsed.classification.value, parsed.reason,
+        )
+        return None, parsed
+
+    existing = MPesaTransaction.objects.filter(mpesa_receipt_number=parsed.receipt_number).first()
+    if existing:
+        return existing, parsed
+
+    raw_payload = {
+        'sms_text': raw_sms_text,
+        'account_reference': parsed.account_reference,
+        'sender_name': parsed.sender_name,
+    }
+
+    mpesa_txn = MPesaTransaction.objects.create(
+        business=business,
+        mpesa_receipt_number=parsed.receipt_number,
+        phone_number=parsed.phone_number or '',
+        amount=parsed.amount,
+        transaction_date=timezone.make_aware(parsed.transaction_date)
+        if timezone.is_naive(parsed.transaction_date) else parsed.transaction_date,
+        transaction_type=MPesaTransaction.TransactionType.SMS,
+        is_matched=False,
+        is_reconciled=False,
+        raw_payload=raw_payload,
+    )
+
+    _try_auto_match(mpesa_txn)
+    return mpesa_txn, parsed
 
 
 # ── Subscription billing (company shortcode — BizYangu's own revenue) ──────────
