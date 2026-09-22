@@ -60,6 +60,122 @@ def _notify_if_crossed_threshold(product, status_before: str) -> None:
             logger.exception('Low-stock notification failed for product %s', product.id)
 
 
+class StockInError(Exception):
+    """
+    Raised for any validation-style failure in record_stock_in() — the
+    same conditions that used to short-circuit create_stock_in() with a
+    Response. Carries the same user-facing message and status code the
+    original view returned, mirroring SaleError/StockCountError's exact
+    shape so all three call sites (view + sync push handler, per
+    service) behave identically to their pre-extraction selves.
+    """
+    def __init__(self, detail, status_code=400):
+        self.detail = detail
+        self.status_code = status_code
+        super().__init__(detail)
+
+
+def record_stock_in(business, user, product_id, quantity, unit_price=None, notes='', sync_idempotency_key=None):
+    """
+    Records a stock delivery: creates a STOCK_IN Transaction + its
+    single TransactionItem, increases the product's current_stock, and
+    logs a RESTOCK StockMovement — exactly as views.create_stock_in
+    always has.
+
+    Extracted out of the view for the same reason record_sale() and
+    record_stock_count() were: the offline-sync push endpoint
+    (apps.sync.views) has no real DRF request to hand a view, but a
+    device that received a delivery while offline needs the exact same
+    validation, stock write, and notification side effects a live
+    stock-in gets.
+
+    Callers are responsible for running StockInSerializer themselves
+    first (same division of labour as record_sale/record_stock_count)
+    and for the IsOwnerOrManager permission check: stock-in is
+    role-gated live, and going offline must not become a way around
+    that gate, so the sync push handler enforces the same role check
+    the live endpoint's permission_classes did before ever calling
+    this.
+
+    `sync_idempotency_key`, when given (only the sync push path passes
+    one), makes this call safe to retry: if a Transaction already
+    exists with this key, it's returned as-is with no second delivery
+    recorded and no stock double-counted — mirrors record_sale()'s
+    identical parameter and rationale exactly.
+
+    Raises StockInError (404) if the product doesn't exist, is
+    inactive, or belongs to a different business. Returns the created
+    (or, on a retried key, the already-existing) Transaction — callers
+    serialize it themselves.
+    """
+    if sync_idempotency_key:
+        existing = Transaction.objects.filter(
+            business=business, sync_idempotency_key=sync_idempotency_key,
+        ).first()
+        if existing is not None:
+            return existing
+
+    try:
+        product = Product.objects.get(id=product_id, business=business, is_active=True)
+    except Product.DoesNotExist:
+        raise StockInError(MESSAGES['PRODUCT_NOT_FOUND'], 404)
+
+    resolved_unit_price = unit_price if unit_price is not None else (product.cost_price or Decimal('0'))
+
+    try:
+        with db_transaction.atomic():
+            txn = Transaction.objects.create(
+                business=business,
+                type=Transaction.Type.STOCK_IN,
+                total_amount=quantity * resolved_unit_price,
+                payment_method=Transaction.PaymentMethod.CASH,
+                payment_status=Transaction.PaymentStatus.CONFIRMED,
+                notes=notes,
+                created_by=user,
+                sync_idempotency_key=sync_idempotency_key,
+            )
+            TransactionItem.objects.create(
+                transaction=txn,
+                product=product,
+                quantity=quantity,
+                unit_price=resolved_unit_price,
+                cost_price=resolved_unit_price,
+                subtotal=quantity * resolved_unit_price,
+            )
+            qty_before = product.current_stock
+            product.current_stock += quantity
+            product.save(update_fields=['current_stock'])
+            StockMovement.objects.create(
+                business=business,
+                product=product,
+                transaction=txn,
+                movement_type=StockMovement.MovementType.RESTOCK,
+                quantity_change=quantity,
+                quantity_before=qty_before,
+                quantity_after=product.current_stock,
+                notes=notes,
+                created_by=user,
+                sync_idempotency_key=sync_idempotency_key,
+            )
+    except IntegrityError:
+        # Same race as record_sale()'s / record_stock_count()'s
+        # identical guard: a concurrent retry of the exact same queued
+        # operation won between our lookup above and this create() —
+        # fetch and return that one rather than surfacing a spurious
+        # failure.
+        if sync_idempotency_key:
+            existing = Transaction.objects.filter(
+                business=business, sync_idempotency_key=sync_idempotency_key,
+            ).first()
+            if existing is not None:
+                return existing
+        raise
+
+    notify_dashboard(business.id, 'stock_in')
+
+    return txn
+
+
 def record_sale(business, user, data, sync_idempotency_key=None):
     """
     Create a SALE Transaction + its TransactionItems, deduct stock, and

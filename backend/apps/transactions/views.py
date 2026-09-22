@@ -21,7 +21,7 @@ from apps.core.messages import MESSAGES
 from apps.inventory.models import StockMovement
 from apps.reports.consumers import notify_dashboard
 from .models import Transaction, TransactionItem
-from .services import record_sale, SaleError
+from .services import record_sale, SaleError, record_stock_in, StockInError
 User = get_user_model()
 
 from .serializers import (
@@ -105,6 +105,11 @@ def create_stock_in(request):
     """
     POST /api/v1/transactions/stock-in/
     Record a stock delivery (increases product current_stock).
+
+    Thin wrapper around services.record_stock_in() (Phase 5 offline-sync
+    extraction, same pattern as create_sale/submit_stock_count) — shared
+    with the sync push endpoint, which calls record_stock_in() directly
+    with no request object.
     """
     business, err = get_business_or_404(request)
     if err:
@@ -115,47 +120,16 @@ def create_stock_in(request):
     data = serializer.validated_data
 
     try:
-        product = Product.objects.get(id=data['product_id'], business=business, is_active=True)
-    except Product.DoesNotExist:
-        return Response({'detail': MESSAGES['PRODUCT_NOT_FOUND']}, status=status.HTTP_404_NOT_FOUND)
-
-    qty = data['quantity']
-    unit_price = data.get('unit_price') or product.cost_price or Decimal('0')
-
-    with db_transaction.atomic():
-        txn = Transaction.objects.create(
-            business=business,
-            type=Transaction.Type.STOCK_IN,
-            total_amount=qty * unit_price,
-            payment_method=Transaction.PaymentMethod.CASH,
-            payment_status=Transaction.PaymentStatus.CONFIRMED,
-            notes=data.get('notes', ''),
-            created_by=request.user,
+        txn = record_stock_in(
+            business,
+            request.user,
+            data['product_id'],
+            data['quantity'],
+            data.get('unit_price'),
+            data.get('notes', ''),
         )
-        TransactionItem.objects.create(
-            transaction=txn,
-            product=product,
-            quantity=qty,
-            unit_price=unit_price,
-            cost_price=unit_price,
-            subtotal=qty * unit_price,
-        )
-        qty_before = product.current_stock
-        product.current_stock += qty
-        product.save(update_fields=['current_stock'])
-        StockMovement.objects.create(
-            business=business,
-            product=product,
-            transaction=txn,
-            movement_type=StockMovement.MovementType.RESTOCK,
-            quantity_change=qty,
-            quantity_before=qty_before,
-            quantity_after=product.current_stock,
-            notes=data.get('notes', ''),
-            created_by=request.user,
-        )
-
-    notify_dashboard(business.id, 'stock_in')
+    except StockInError as e:
+        return Response({'detail': e.detail}, status=e.status_code)
 
     return Response(TransactionSerializer(txn).data, status=status.HTTP_201_CREATED)
 

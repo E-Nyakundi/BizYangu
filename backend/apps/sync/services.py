@@ -38,8 +38,8 @@ from apps.inventory.models import StockMovement, RepackageEvent
 from apps.inventory.serializers import StockCountSerializer, StockMovementSerializer, RepackageEventSerializer
 from apps.inventory.services import record_stock_count, StockCountError
 from apps.transactions.models import Transaction, TransactionItem
-from apps.transactions.serializers import SaleCreateSerializer, TransactionSerializer
-from apps.transactions.services import record_sale, SaleError
+from apps.transactions.serializers import SaleCreateSerializer, StockInSerializer, TransactionSerializer
+from apps.transactions.services import record_sale, SaleError, record_stock_in, StockInError
 
 logger = logging.getLogger(__name__)
 
@@ -217,15 +217,57 @@ def _push_create_stock_count(business, user, payload, client_id):
     return StockMovementSerializer(movement).data
 
 
+def _push_create_stock_in(business, user, payload, client_id):
+    """
+    Handler for push operation type 'create_stock_in' — an offline
+    stock delivery. Mirrors _push_create_stock_count's shape exactly:
+    same StockInSerializer the live /transactions/stock-in/ endpoint
+    uses, same client_id-as-idempotency-key contract, same role check
+    duplicated here since there is no DRF permission_classes mechanism
+    to lean on for a push operation.
+
+    The role check matters for the same reason it does on stock count:
+    going offline must never become a way to bypass IsOwnerOrManager —
+    a cashier's device that's offline still can't record a delivery any
+    more than it could submit one live.
+    """
+    if not client_id:
+        raise PushOperationError(MESSAGES['SYNC_CLIENT_ID_REQUIRED'])
+
+    if user.role not in ('OWNER', 'MANAGER'):
+        raise PushOperationError(MESSAGES['OWNER_OR_MANAGER_ONLY'])
+
+    serializer = StockInSerializer(data=payload)
+    if not serializer.is_valid():
+        raise PushOperationError(serializer.errors)
+
+    data = serializer.validated_data
+    try:
+        txn = record_stock_in(
+            business,
+            user,
+            data['product_id'],
+            data['quantity'],
+            data.get('unit_price'),
+            data.get('notes', ''),
+            sync_idempotency_key=client_id,
+        )
+    except StockInError as e:
+        raise PushOperationError(e.detail)
+
+    return TransactionSerializer(txn).data
+
+
 # Every push operation type this endpoint accepts, mapped to its handler.
-# Adding a new syncable write (stock-in, refund, void, customer
-# create/edit) is a matter of extracting its logic into a services.py
-# function the same way record_sale() and record_stock_count() were
-# extracted, then adding one entry here — apply_push_operation() and
-# the wire format don't change.
+# Adding a new syncable write (refund, void, customer create/edit) is a
+# matter of extracting its logic into a services.py function the same
+# way record_sale(), record_stock_count(), and record_stock_in() were
+# extracted, then adding one entry here — apply_push_operation() and the
+# wire format don't change.
 PUSH_HANDLERS = {
     'create_sale': _push_create_sale,
     'create_stock_count': _push_create_stock_count,
+    'create_stock_in': _push_create_stock_in,
 }
 
 
