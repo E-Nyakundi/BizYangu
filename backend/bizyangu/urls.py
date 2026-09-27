@@ -3,9 +3,11 @@ BizYangu — URL Configuration
 """
 
 from decouple import config
+from django.conf import settings
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from django.http import JsonResponse
+from django.views.static import serve as serve_media
 
 
 def health_check(request):
@@ -41,4 +43,22 @@ urlpatterns = [
     path('api/v1/knowledge/', include('apps.knowledge.urls')),
     path('api/v1/products/', include('apps.products.urls')),
     path('api/v1/sync/', include('apps.sync.urls')),
+]
+
+# Product photos (and any other user-uploaded MEDIA_ROOT file) — nothing
+# in this project serves /media/ in production: WhiteNoise (already
+# wired in for STATIC_URL above) deliberately only serves build-time
+# static assets, never MEDIA_ROOT, and no static() helper for MEDIA_URL
+# was ever added outside DEBUG. That gap was invisible until the
+# product-photo feature actually needed to read an uploaded file back —
+# ImageField uploads still succeeded and the DB/API happily returned a
+# /media/... URL, it just 404'd for every viewer. django.views.static.serve
+# is Django's own plain file-serving view — normally dev-only advice, but
+# fine for this volume of traffic (small-business product photos, not a
+# CDN-scale media library) and works whether or not the reverse proxy
+# (Caddy) is also configured to intercept /media/ first, since Caddy
+# routing to this container for anything it doesn't shortcut is the
+# existing setup already relied on for every other path here.
+urlpatterns += [
+    re_path(r'^media/(?P<path>.*)$', serve_media, {'document_root': settings.MEDIA_ROOT}),
 ]
