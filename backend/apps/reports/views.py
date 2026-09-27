@@ -6,6 +6,7 @@ only: this is business intelligence, not something a cashier needs.
 """
 
 from decimal import Decimal
+from django.core.files.storage import default_storage
 from django.db.models import Sum, Count, Q, F
 from django.db.models.functions import TruncDate
 from django.utils import timezone
@@ -93,13 +94,16 @@ def _money_summary(business, date_from, date_to):
     }
 
 
-def _top_products(business, date_from, date_to, limit=5):
+def _top_products(business, date_from, date_to, request, limit=5):
     rows = (
         Transaction.objects.filter(
             business=business, type=Transaction.Type.SALE, is_voided=False,
             created_at__date__gte=date_from, created_at__date__lte=date_to,
         )
-        .values('items__product_id', 'items__product__name', 'items__product__unit')
+        .values(
+            'items__product_id', 'items__product__name', 'items__product__unit',
+            'items__product__image',
+        )
         .annotate(qty_sold=Sum('items__quantity'), revenue=Sum('items__subtotal'))
         .exclude(items__product_id__isnull=True)
         .order_by('-revenue')[:limit]
@@ -111,6 +115,16 @@ def _top_products(business, date_from, date_to, limit=5):
             'unit': row['items__product__unit'],
             'quantity_sold': str(row['qty_sold']),
             'revenue': str((row['revenue'] or Decimal('0.00')).quantize(Decimal('0.01'))),
+            # .values() returns the raw stored path (e.g.
+            # "products/abc.jpg"), not a URL — build_absolute_uri turns
+            # that into something a mobile client can pass straight to
+            # an image loader, same as what DRF's ImageField would
+            # produce automatically on a real serializer. None (not '')
+            # when the product has no image, so callers can tell
+            # "no photo" apart from "photo at the empty string".
+            'image': request.build_absolute_uri(
+                default_storage.url(row['items__product__image'])
+            ) if row['items__product__image'] else None,
         }
         for row in rows
     ]
@@ -334,7 +348,7 @@ def dashboard(request):
         **today_summary,
         'revenue_change_pct': change_pct,
         'yesterday_net_revenue': yesterday_summary['net_revenue'],
-        'top_products': _top_products(business, today, today, limit=5),
+        'top_products': _top_products(business, today, today, request, limit=5),
         'stock_alert': _low_stock_summary(business, limit=5),
     })
 
@@ -361,7 +375,7 @@ def daily_report(request):
         'date': str(the_date),
         **summary,
         'voided_count': voided_count,
-        'top_products': _top_products(business, the_date, the_date, limit=10),
+        'top_products': _top_products(business, the_date, the_date, request, limit=10),
         'losses': _loss_summary(business, the_date, the_date),
     })
 
@@ -401,7 +415,7 @@ def period_report(request):
         'end': str(end),
         **summary,
         'daily_breakdown': daily_breakdown,
-        'top_products': _top_products(business, start, end, limit=10),
+        'top_products': _top_products(business, start, end, request, limit=10),
         'losses': _loss_summary(business, start, end),
     })
 
@@ -585,7 +599,7 @@ def eod_summary(request):
     the_date = q.get_date()
 
     summary = _money_summary(business, the_date, the_date)
-    top = _top_products(business, the_date, the_date, limit=3)
+    top = _top_products(business, the_date, the_date, request, limit=3)
     stock = _low_stock_summary(business, limit=5)
 
     top_lines = '\n'.join(

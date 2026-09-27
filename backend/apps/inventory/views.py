@@ -65,7 +65,7 @@ def stock_levels(request):
     if category_id:
         qs = qs.filter(category_id=category_id)
 
-    serializer = StockLevelSerializer(qs, many=True)
+    serializer = StockLevelSerializer(qs, many=True, context={'request': request})
     return Response(serializer.data)
 
 
@@ -90,7 +90,7 @@ def low_stock(request):
         current_stock__lte=F('low_stock_threshold'),
     ).select_related('category').order_by('current_stock', 'name')
 
-    serializer = StockLevelSerializer(qs, many=True)
+    serializer = StockLevelSerializer(qs, many=True, context={'request': request})
     return Response(serializer.data)
 
 

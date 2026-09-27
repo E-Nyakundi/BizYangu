@@ -104,7 +104,7 @@ PULL_MODELS = {
 PULL_PAGE_SIZE = 500
 
 
-def pull_changes(business, model_name, since):
+def pull_changes(business, model_name, since, request=None):
     """
     Returns (serialized_rows, reached_page_limit) for one model, scoped
     to `business`, changed strictly after `since` (a datetime, or None
@@ -114,6 +114,15 @@ def pull_changes(business, model_name, since):
     back, signalling the client should immediately re-pull this same
     model using the last row's timestamp before considering this
     model caught up.
+
+    `request` is passed through as serializer context so ProductSerializer's
+    `image` field (an ImageField) resolves to an absolute URL the same
+    way apps/inventory's StockLevelSerializer and reports' _top_products
+    now do — without it, DRF falls back to a relative path
+    (/media/products/xyz.jpg), which the offline cache would store
+    verbatim and Image.network can't load on its own. Optional/defaulted
+    to None rather than required, since not every future caller of this
+    function will have a request in hand.
     """
     spec = PULL_MODELS[model_name]
     qs = spec['queryset'](business)
@@ -126,7 +135,7 @@ def pull_changes(business, model_name, since):
     reached_page_limit = len(rows) == PULL_PAGE_SIZE
 
     serializer = spec['serializer']
-    data = serializer(rows, many=True).data
+    data = serializer(rows, many=True, context={'request': request}).data
 
     # Echo each row's own timestamp back alongside the serialized fields
     # so the client can advance its per-model cursor to the exact value

@@ -67,7 +67,7 @@ def pull(request):
 
     result = {}
     for model_name in services.PULL_MODELS:
-        rows, reached_page_limit = services.pull_changes(business, model_name, since)
+        rows, reached_page_limit = services.pull_changes(business, model_name, since, request=request)
         result[model_name] = {'rows': rows, 'reached_page_limit': reached_page_limit}
 
     return Response(result)

@@ -90,3 +90,9 @@ class StockLevelSerializer(serializers.Serializer):
     unit = serializers.CharField()
     category_name = serializers.CharField(source='category.name', default=None)
     track_stock = serializers.BooleanField()
+    # Sourced straight off the model's ImageField -- needs
+    # context={'request': ...} at instantiation for DRF to build an
+    # absolute URL (see the view below); with no request in context it
+    # falls back to a relative path, which is still usable but less
+    # convenient for a client that doesn't know the API host itself.
+    image = serializers.ImageField(default=None)
