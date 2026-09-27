@@ -11,39 +11,11 @@
 #   docker compose -f docker-compose.prod.yml up -d
 #   docker compose -f docker-compose.prod.yml logs -f backend
 
-# Explicit project name, not left to default to the containing directory's
-# name. Compose derives container names as <project>-<service>-<n> when
-# no container_name: is set (removed below — see rationale there); an
-# implicit project name silently changes if this file is ever invoked
-# from a differently-named directory or a differently-cased checkout,
-# producing a *second* set of containers alongside the first instead of
-# replacing them. Pinning it here means every `docker compose ... up`
-# against this file — from deploy.yml, from a manual SSH session, from
-# a fresh checkout — always resolves to the same project and the same
-# container identity, regardless of invocation directory.
-name: bizyangu
-
 services:
-
-  # container_name: intentionally not set on any service below (removed
-  # 2026-09-22 — was bizyangu_postgres/bizyangu_redis/bizyangu_backend/
-  # bizyangu_celery_worker/bizyangu_celery_beat/bizyangu_caddy). A fixed
-  # container_name is a *hard* uniqueness constraint Docker enforces
-  # regardless of which compose project created the container — if an
-  # old/orphaned container still holds that exact name (a prior deploy
-  # that didn't get torn down cleanly, a manually-run container, a stale
-  # container from an inconsistent project name), `up -d --build` cannot
-  # create the new one and fails with "Conflict. The container name
-  # ... is already in use." This is the confirmed cause of a real failed
-  # deploy. Without container_name, Compose names containers
-  # <project>-<service>-<n> (see the top-level `name: bizyangu` above)
-  # and can cleanly stop-and-replace its own previous container on every
-  # deploy — `--remove-orphans` (see deploy.yml) handles anything Compose
-  # itself created but no longer expects; it does not need container_name
-  # to identify what's safe to replace.
 
   postgres:
     image: postgres:16-alpine
+    container_name: bizyangu_postgres
     restart: unless-stopped
     env_file: .env.production
     environment:
@@ -62,6 +34,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: bizyangu_redis
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -73,6 +46,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
+    container_name: bizyangu_backend
     restart: unless-stopped
     env_file: .env.production
     environment:
@@ -81,6 +55,15 @@ services:
       REDIS_URL: redis://redis:6379/0
     volumes:
       - ./knowledge:/knowledge
+      # Product photos (ImageField, MEDIA_ROOT=/app/media) — without
+      # this, an upload writes to the container's own filesystem layer
+      # and is gone the next time this service is rebuilt/recreated
+      # (every `docker compose up --build`), which is exactly what was
+      # happening: uploads "worked" (200 response, file briefly
+      # readable) but never survived a redeploy. Named volume, same
+      # pattern as postgres_data below, rather than a host bind mount,
+      # so it isn't tied to one specific path on the VM.
+      - media_data:/app/media
     depends_on:
       postgres:
         condition: service_healthy
@@ -93,6 +76,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
+    container_name: bizyangu_celery_worker
     restart: unless-stopped
     env_file: .env.production
     environment:
@@ -101,6 +85,7 @@ services:
       REDIS_URL: redis://redis:6379/0
     volumes:
       - ./knowledge:/knowledge
+      - media_data:/app/media
     depends_on:
       postgres:
         condition: service_healthy
@@ -112,6 +97,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.prod
+    container_name: bizyangu_celery_beat
     restart: unless-stopped
     env_file: .env.production
     environment:
@@ -120,6 +106,7 @@ services:
       REDIS_URL: redis://redis:6379/0
     volumes:
       - ./knowledge:/knowledge
+      - media_data:/app/media
     depends_on:
       postgres:
         condition: service_healthy
@@ -132,6 +119,7 @@ services:
 
   caddy:
     image: caddy:2-alpine
+    container_name: bizyangu_caddy
     restart: unless-stopped
     ports:
       - "80:80"
@@ -145,5 +133,6 @@ services:
 
 volumes:
   postgres_data:
+  media_data:
   caddy_data:
   caddy_config:
